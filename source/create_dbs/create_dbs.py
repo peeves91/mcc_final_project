@@ -66,17 +66,38 @@ def CreateItemDb(dbDirectory, removeExisting):
 		'price DECIMAL,' \
 		'quantity_in_stock INTEGER)')
 
+def CreateShoppingCartDb(dbDirectory, removeExisting):
+	dbPath = os.path.join(dbDirectory, 'shopping_carts.db')
+	
+	if os.path.exists(dbPath) == True:
+		os.remove(dbPath)
+	
+	conn = sqlite3.connect(dbPath)
+	cursor = conn.cursor()
+	
+	cursor.execute('CREATE TABLE shopping_carts(' \
+		'id INTEGER PRIMARY KEY AUTOINCREMENT,' \
+		'user_id INTEGER,' \
+		'status TEXT)')
+	
+	cursor.execute('CREATE TABLE shopping_cart_items(' \
+		'cart_id INTEGER,' \
+		'item_id INTEGER,' \
+		'quantity INTEGER,' \
+		'price DECIMAL)')
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--db-directory', dest='db_directory', required=True)
 	parser.add_argument('-r', action='store_true', dest='remove_existing', required=False)
 	args = parser.parse_args()
 	
-	CreateOrderDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
-	CreateUserDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
-	CreateItemDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
+	# CreateOrderDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
+	# CreateUserDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
+	# CreateItemDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
+	CreateShoppingCartDb(dbDirectory=args.db_directory, removeExisting=args.remove_existing)
 	
 	return
 
 if __name__ == '__main__':
-	# main()
+	main()
