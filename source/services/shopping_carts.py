@@ -17,7 +17,7 @@ dbLock = threading.Lock()
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"}
+		"user_id": {"type": "integer"} # @todo swelter: change this to user email and query for user id in call
 	},
 	"required": []
 }
@@ -25,7 +25,7 @@ CREATE_SHOPPING_CART_SCHEMA = {
 GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"}
+		"user_id": {"type": "integer"} # @todo swelter: change this to user email and query for user id in call
 	},
 	"required": ["user_id"]
 }
@@ -33,9 +33,9 @@ GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA = {
 ADD_ITEM_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"},
-		"item_id": {"type": "integer"},
-		"item_quantity": {"type": "integer"}
+		"user_id": {"type": "integer"}, # @todo swelter: change this to user email and query for user id in call
+		"item_id": {"type": "integer"}, # @todo swelter: change this to item name and query for item id in call
+		"quantity": {"type": "integer"}
 	},
 	"required": ["user_id", "item_id", "quantity"]
 }
@@ -102,7 +102,7 @@ def AddItemToCart():
 	
 	cartId = cartResults[0]
 	
-	# TODO swelter: fetch item price from item service
+	# @todo swelter: fetch item price from item service
 	itemPrice = 12
 	
 	with dbLock:
@@ -126,14 +126,14 @@ def GetShoppingCartItems():
 	
 	reqData = request.get_json()
 	
-	# TODO swelter: put this in a function as it's obviously used everywhere
+	# @todo swelter: put this in a function as it's obviously used everywhere
 	# get cart_id from user_id
 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (reqData['user_id'],))
 	cartResults = dbCursor.fetchone()
 	
 	# return 500 error if no cart found
 	if cartResults == None:
-		return make_response('no open cart found for user', 500)
+		return make_response('no_cart', 500)
 	
 	cartId = cartResults[0]
 	
@@ -171,12 +171,16 @@ def PurchaseShoppingCart():
 	
 	# return 500 error if no cart found
 	if cartResults == None:
-		return make_response('no open cart found for user', 500)
+		return make_response('no_cart', 500)
 	
 	cartId = cartResults[0]
 	
 	dbCursor.execute('SELECT item_id, quantity, price FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
 	itemResults = dbCursor.fetchall()
+	
+	# @todo swelter: validate all item quantities can be purchased (i.e. stock is >= items in cart)
+	
+	# @todo swelter: add a simple payment service for additional complexity
 	
 	# list of tuples of cart items, format:
 	#	* item_id
@@ -231,4 +235,4 @@ if __name__ == '__main__':
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
 	
-	app.run(debug=True)
+	app.run(host='0.0.0.0', port=2000, debug=True)
