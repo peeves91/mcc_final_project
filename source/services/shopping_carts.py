@@ -1,13 +1,22 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
+from typing import List, Dict
 import argparse
+import json
 import logging
 import os
+import requests
 import sqlite3
 import threading
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
+
+# constants
+JSON_HEADER_DATATYPE		= {'Content-type': 'application/json'}
+SHOPPING_CART_SERVICE_PORT	= 6000
+USERS_SERVICE_PORT			= 7000
+ITEMS_SERVICE_PORT			= 8000
 
 # globals
 cartDbConn = None
@@ -17,28 +26,91 @@ dbLock = threading.Lock()
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"} # @todo swelter: change this to user email and query for user id in call
+		"user_email": {"type": "string"}
 	},
-	"required": []
+	"required": ["user_email"]
 }
 
 GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"} # @todo swelter: change this to user email and query for user id in call
+		"user_email": {"type": "string"}
 	},
-	"required": ["user_id"]
+	"required": ["user_email"]
 }
 
 ADD_ITEM_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_id": {"type": "integer"}, # @todo swelter: change this to user email and query for user id in call
-		"item_id": {"type": "integer"}, # @todo swelter: change this to item name and query for item id in call
+		"user_email": {"type": "string"},
+		"item_name": {"type": "string"},
 		"quantity": {"type": "integer"}
 	},
-	"required": ["user_id", "item_id", "quantity"]
+	"required": ["user_email", "item_name", "quantity"]
 }
+
+# helper functions
+def GetUserIdFromEmail(email: str) -> int:
+	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/get_user'
+	getData = {'email': email}
+	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+	
+	try:
+		respJson = resp.json()
+	except requests.exceptions.JSONDecodeError:
+		return None
+	
+	# if no users found, return None
+	if len(respJson['results']) == 0:
+		return None
+	
+	foundUser = respJson['results'][0]
+	return foundUser['user_id']
+
+def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
+	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+	# getData = {'item_name': itemName}
+	
+	if itemName != None:
+		getData = {'item_name': itemName}
+	elif itemId != None:
+		getData = {'item_id': itemId}
+	else:
+		return None
+	
+	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+	
+	if resp.status_code != 200:
+		return make_response(resp.text, resp.status_code)
+	
+	try:
+		respJson = resp.json()
+	except requests.exceptions.JSONDecodeError:
+		return None
+	
+	# @todo swelter: handle item not found here
+	
+	return respJson['item']
+
+def CalculateTotalPriceOfItems(items: List[Dict]) -> float:
+	totalPrice = 0
+	
+	for index in range(len(items)):
+		url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+		getData = {'item_id': items[index]['item_id']}
+		resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+		
+		if resp.status_code != 200:
+			return None
+		
+		try:
+			respJson = resp.json()
+		except requests.exceptions.JSONDecodeError:
+			return None
+		
+		totalPrice += (respJson['item'][1] * items[index]['quantity'])
+	
+	return totalPrice
 
 @app.route('/')
 def HelloWorld():
@@ -59,8 +131,14 @@ def GetOrCreateShoppingCart():
 	
 	reqData = request.get_json()
 	
+	# get user_id from users service
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
+	if userId == None:
+		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	
 	# check if cart exists
-	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = ?', (reqData['user_id'], 'open',))
+	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = ?', (userId, 'open',))
 	results = dbCursor.fetchone()
 	
 	# if we found an existing cart, return it and we're done
@@ -69,7 +147,7 @@ def GetOrCreateShoppingCart():
 	
 	# no cart found, create one and return the id
 	with dbLock:
-		dataToInsert = (reqData['user_id'], 'open')
+		dataToInsert = (userId, 'open')
 		dbCursor.execute('INSERT INTO shopping_carts(user_id, status) VALUES(?, ?)', dataToInsert)
 		cartDbConn.commit()
 	
@@ -92,8 +170,14 @@ def AddItemToCart():
 	
 	reqData = request.get_json()
 	
+	# get user_id from users service
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
+	if userId == None:
+		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	
 	# get cart_id from user_Id
-	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (reqData['user_id'],))
+	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
 	cartResults = dbCursor.fetchone()
 	
 	# return 500 error if no cart found
@@ -102,12 +186,10 @@ def AddItemToCart():
 	
 	cartId = cartResults[0]
 	
-	# @todo swelter: fetch item price from item service
-	itemPrice = 12
+	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
 	
 	with dbLock:
-		dataToInsert = (cartId, reqData['item_id'], reqData['quantity'], itemPrice,)
-		print(dataToInsert)
+		dataToInsert = (cartId, itemInfo[0], reqData['quantity'], itemInfo[1],)
 		dbCursor.execute('INSERT INTO shopping_cart_items(cart_id, item_id, quantity, price) VALUES(?, ?, ?, ?)', dataToInsert)
 		cartDbConn.commit()
 	
@@ -126,9 +208,15 @@ def GetShoppingCartItems():
 	
 	reqData = request.get_json()
 	
+	# get user_id from users service
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
+	if userId == None:
+		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	
 	# @todo swelter: put this in a function as it's obviously used everywhere
 	# get cart_id from user_id
-	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (reqData['user_id'],))
+	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
 	cartResults = dbCursor.fetchone()
 	
 	# return 500 error if no cart found
@@ -165,8 +253,14 @@ def PurchaseShoppingCart():
 	
 	reqData = request.get_json()
 	
+	# get user_id from users service
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
+	if userId == None:
+		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	
 	# get cart_id from user_Id
-	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (reqData['user_id'],))
+	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
 	cartResults = dbCursor.fetchone()
 	
 	# return 500 error if no cart found
@@ -178,8 +272,6 @@ def PurchaseShoppingCart():
 	dbCursor.execute('SELECT item_id, quantity, price FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
 	itemResults = dbCursor.fetchall()
 	
-	# @todo swelter: validate all item quantities can be purchased (i.e. stock is >= items in cart)
-	
 	# @todo swelter: add a simple payment service for additional complexity
 	
 	# list of tuples of cart items, format:
@@ -189,16 +281,30 @@ def PurchaseShoppingCart():
 	cartItems = []
 	for row in itemResults:
 		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2]}
+		
+		stockInfo = GetItemInfoFromNameOrId(itemId=row[0])
+		
+		if stockInfo[2] < tempItem['quantity']:
+			return make_response(f'item_id {tempItem["item_id"]} has {stockInfo[2]} in stock, {tempItem["quantity"]} requested', 500)
+		
 		cartItems.append(tempItem)
+	
+	# if we get here, cart is validated
+	totalPrice = CalculateTotalPriceOfItems(items=cartItems)
+	
+	if totalPrice == None:
+		return make_response('error calculating shopping cart total', 500)
 	
 	# mark cart as purchased
 	with dbLock:
-		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', reqData['user_id']))
+		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', userId))
 		cartDbConn.commit()
 	
-	app.logger.log(level=logging.INFO, msg=f'closed cart for user_id={reqData["user_id"]}')
+	# @todo swelter: decrease bought items from stock via items service
 	
-	return jsonify({'items': cartItems})
+	app.logger.log(level=logging.INFO, msg=f'closed cart for user_id={userId}')
+	
+	return jsonify({'items': cartItems, 'total_price': totalPrice})
 
 ###########################################################################
 ##	
@@ -214,14 +320,20 @@ def CancelCart():
 	
 	reqData = request.get_json()
 	
+	# get user_id from users service
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
+	if userId == None:
+		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	
 	with dbLock:
-		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', reqData['user_id'],))
+		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', userId,))
 		cartDbConn.commit()
 		
 		if dbCursor.rowcount == 0:
 			app.logger.log(level=logging.WARNING, msg='unable to find cart to cancel, okay for now...')
 		else:
-			app.logger.log(level=logging.INFO, msg=f'canceled cart for user_id={reqData["user_id"]}')
+			app.logger.log(level=logging.INFO, msg=f'canceled cart for user_id={userId}')
 	
 	return 'success'
 
@@ -235,4 +347,4 @@ if __name__ == '__main__':
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
 	
-	app.run(host='0.0.0.0', port=2000, debug=True)
+	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT, debug=True)
