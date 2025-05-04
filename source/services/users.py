@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
 import argparse
 import datetime
@@ -7,6 +7,12 @@ import sqlite3
 
 app = Flask(__name__)
 dbPath = None
+
+# constants
+ORDER_SERVICE_PROT			= 5000
+SHOPPING_CART_SERVICE_PORT	= 6000
+USERS_SERVICE_PORT			= 7000
+ITEMS_SERVICE_PORT			= 8000
 
 CREATE_USER_SCHEMA = {
 	"type": "object",
@@ -25,6 +31,7 @@ CREATE_USER_SCHEMA = {
 def HelloWorld():
 	return "hello, world"
 
+# @todo swelter: add schema here
 @app.route('/get_user', methods=['GET'])
 def GetUser():
 	reqData = request.get_json()
@@ -33,12 +40,14 @@ def GetUser():
 		searchColumn = 'last_name'
 	elif 'id' in reqData:
 		searchColumn = 'id'
+	elif 'email' in reqData:
+		searchColumn = 'email'
 	else:
-		return 'no valid search criteria specified', 400
+		return make_response('no valid search criteria specified', 500)
 	
 	usersConn = sqlite3.connect(database=dbPath)
 	usersCursor = usersConn.cursor()
-	usersCursor.execute(f'SELECT id, email, first_name, last_name, updated_at FROM users WHERE {searchColumn} = ?', (reqData['last_name'],))
+	usersCursor.execute(f'SELECT id, email, first_name, last_name, updated_at FROM users WHERE {searchColumn} = ?', (reqData[searchColumn],))
 	usersResults = usersCursor.fetchall()
 	
 	profilesConn = sqlite3.connect(database=dbPath)
@@ -50,14 +59,14 @@ def GetUser():
 			tempResult = {}
 			
 			# get basic user information from users table
-			tempResult['id'] = row[0]
+			tempResult['user_id'] = row[0]
 			tempResult['email'] = row[1]
 			tempResult['first_name'] = row[2]
 			tempResult['last_name'] = row[3]
 			tempResult['updated_at'] = row[4]
 			
 			# get further information from user_profiles table
-			profilesCursor.execute('SELECT address, phone FROM user_profiles WHERE user_id = ?', (tempResult['id'],))
+			profilesCursor.execute('SELECT address, phone FROM user_profiles WHERE user_id = ?', (tempResult['user_id'],))
 			profileData = profilesCursor.fetchall()[0]
 			tempResult['address'] = profileData[0]
 			tempResult['phone'] = profileData[1]
@@ -101,4 +110,4 @@ if __name__ == '__main__':
 	
 	dbPath = os.path.join(args.db_directory, 'users.db')
 	
-	app.run(debug=True)
+	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT, debug=True)

@@ -9,6 +9,12 @@ import threading
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+# constants
+ORDER_SERVICE_PROT			= 5000
+SHOPPING_CART_SERVICE_PORT	= 6000
+USERS_SERVICE_PORT			= 7000
+ITEMS_SERVICE_PORT			= 8000
+
 # globals
 itemsDbConn = None
 dbCursor = None
@@ -21,9 +27,9 @@ def HelloWorld():
 GET_ITEM_INFO_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"item_name": {"type": "string"}
-	},
-	"required": ["item_name"]
+		"item_name": {"type": "string"},
+		"item_id": {"type": "integer"}
+	}
 }
 
 VALIDATE_ITEMS_SCHEMA = {
@@ -50,10 +56,19 @@ def GetItemInfo():
 	
 	reqData = request.get_json()
 	
-	dbCursor.execute('SELECT id, price, quantity_in_stock FROM items WHERE product_name = ?', (reqData['item_name'],))
+	if 'item_name' in reqData:
+		searchColumn = 'product_name'
+		searchValue = reqData['item_name']
+	elif 'item_id' in reqData:
+		searchColumn = 'id'
+		searchValue = reqData['item_id']
+	else:
+		return make_response('no valid search criteria specified', 500)
+	
+	dbCursor.execute(f'SELECT id, price, quantity_in_stock FROM items WHERE {searchColumn} = ?', (searchValue,))
 	item = dbCursor.fetchall()[0]
 	
-	return jsonify({'data': list(item)})
+	return jsonify({'item': item})
 
 ###########################################################################
 ##	
@@ -91,4 +106,4 @@ if __name__ == '__main__':
 	itemsDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = itemsDbConn.cursor()
 	
-	app.run(debug=True)
+	app.run(host='0.0.0.0', port=ITEMS_SERVICE_PORT, debug=True)
