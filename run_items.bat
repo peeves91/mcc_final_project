@@ -1,0 +1,1 @@
+python source/services/items.py --db-directory db/
