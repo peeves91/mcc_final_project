@@ -112,8 +112,8 @@ def PurchaseQueuedItems():
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	# if there was an error purchasing cart, return it
-	if resp.status_code == 500:
-		return make_response(resp.text, 500)
+	if resp.status_code != 200:
+		return make_response(resp.text, resp.status_code)
 	
 	try:
 		respJson = resp.json()
@@ -123,7 +123,25 @@ def PurchaseQueuedItems():
 	# return purchased items
 	return jsonify(respJson)
 
-# @todo swelter: add endpoint to clear queue
+###########################################################################
+##	
+##	Clear current queue of items
+##	
+###########################################################################
+@app.route('/clear_queue', methods=['POST'])
+@expects_json(GET_PURCHASE_QUEUED_ITEMS)
+def ClearQueuedItems():
+	reqData = request.get_json()
+	
+	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/cancel_cart'
+	postData = {'user_email': reqData['user_email']}
+	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
+	
+	# if there was an error cancelling the queue, return it
+	if resp.status_code != 200:
+		return make_response(resp.text, resp.status_code)
+	
+	return 'success'
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
