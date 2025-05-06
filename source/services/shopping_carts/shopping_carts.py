@@ -60,7 +60,7 @@ GET_SC_CONTAINING_ITEM = {
 
 # helper functions
 def GetUserInfoFromEmailOrId(email=None, userId=None):
-	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/get_user'
+	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
 	
 	if email != None:
 		getData = {'email': email}
@@ -88,7 +88,7 @@ def GetUserIdFromEmail(email: str) -> int:
 	return GetUserInfoFromEmailOrId(email=email)['user_id']
 
 def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
-	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+	url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
 	
 	if itemName != None:
 		getData = {'item_name': itemName}
@@ -115,7 +115,7 @@ def CalculateTotalPriceOfItems(items: List[Dict]) -> float:
 	totalPrice = 0
 	
 	for index in range(len(items)):
-		url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+		url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
 		getData = {'item_id': items[index]['item_id']}
 		resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 		

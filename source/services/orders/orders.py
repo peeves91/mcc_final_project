@@ -61,7 +61,8 @@ def QueueAddItem():
 	reqData = request.get_json()
 	
 	# Simply ensure a cart exists
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/get_or_create_cart'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_or_create_cart'
+	print(url)
 	postData = {'user_email': reqData['user_email']}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
@@ -69,7 +70,7 @@ def QueueAddItem():
 	if resp.status_code != 200:
 		return make_response(resp.text, resp.status_code)
 	
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/add_item_to_cart'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/add_item_to_cart'
 	postData = {'user_email': reqData['user_email'], 'item_name': reqData['item_name'], 'quantity': reqData['quantity']}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
@@ -88,7 +89,7 @@ def QueueAddItem():
 def GetQueuedItems():
 	reqData = request.get_json()
 	
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/get_cart_items'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_cart_items'
 	getData = {'user_email': reqData['user_email']}
 	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 	
@@ -116,7 +117,7 @@ def GetQueuedItems():
 def PurchaseQueuedItems():
 	reqData = request.get_json()
 	
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
 	postData = {'user_email': reqData['user_email']}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
@@ -142,7 +143,7 @@ def PurchaseQueuedItems():
 def ClearQueuedItems():
 	reqData = request.get_json()
 	
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/cancel_cart'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/cancel_cart'
 	postData = {'user_email': reqData['user_email']}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
@@ -162,7 +163,7 @@ def ClearQueuedItems():
 def GetOrdersContainingItem():
 	reqData = request.get_json()
 	
-	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/get_sc_containing_item'
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_sc_containing_item'
 	resp = requests.get(url=url, data=json.dumps(reqData), headers=JSON_HEADER_DATATYPE)
 	
 	return jsonify(resp.json())
