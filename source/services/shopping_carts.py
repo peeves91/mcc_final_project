@@ -49,10 +49,26 @@ ADD_ITEM_SCHEMA = {
 	"required": ["user_email", "item_name", "quantity"]
 }
 
+GET_SC_CONTAINING_ITEM = {
+	"type": "object",
+	"properties": {
+		"item_name": {"type": "string"},
+		"email": {"type": "string"}
+	},
+	"required": ["item_name"]
+}
+
 # helper functions
-def GetUserIdFromEmail(email: str) -> int:
+def GetUserInfoFromEmailOrId(email=None, userId=None):
 	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/get_user'
-	getData = {'email': email}
+	
+	if email != None:
+		getData = {'email': email}
+	elif userId != None:
+		getData = {'id': userId}
+	else:
+		return None
+	
 	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 	
 	try:
@@ -65,11 +81,14 @@ def GetUserIdFromEmail(email: str) -> int:
 		return None
 	
 	foundUser = respJson['results'][0]
-	return foundUser['user_id']
+	
+	return foundUser
+
+def GetUserIdFromEmail(email: str) -> int:
+	return GetUserInfoFromEmailOrId(email=email)['user_id']
 
 def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
 	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
-	# getData = {'item_name': itemName}
 	
 	if itemName != None:
 		getData = {'item_name': itemName}
@@ -297,18 +316,18 @@ def PurchaseShoppingCart():
 	
 	# mark cart as purchased
 	with dbLock:
-		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', userId))
+		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('purchased', userId))
 		cartDbConn.commit()
 	
 	# @todo swelter: decrease bought items from stock via items service
 	
-	app.logger.log(level=logging.INFO, msg=f'closed cart for user_id={userId}')
+	app.logger.log(level=logging.INFO, msg=f'purchased cart for user_id={userId}')
 	
 	return jsonify({'items': cartItems, 'total_price': totalPrice})
 
 ###########################################################################
 ##	
-##	Marks a cart as closed.
+##	Marks a cart as cancelled.
 ##	
 ###########################################################################
 @app.route('/cancel_cart', methods=['POST'])
@@ -327,7 +346,7 @@ def CancelCart():
 		return make_response(f'no user found with email {reqData["user_email"]}', 500)
 	
 	with dbLock:
-		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('closed', userId,))
+		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('cancelled', userId,))
 		cartDbConn.commit()
 		
 		if dbCursor.rowcount == 0:
@@ -336,6 +355,75 @@ def CancelCart():
 			app.logger.log(level=logging.INFO, msg=f'canceled cart for user_id={userId}')
 	
 	return 'success'
+
+###########################################################################
+##	
+##	Returns all purchased shopping carts containing the passed in item,
+##	including details about the user that ordered it
+##	
+###########################################################################
+@app.route('/get_sc_containing_item', methods=['GET'])
+@expects_json(GET_SC_CONTAINING_ITEM)
+def GetScContainingItem():
+	global dbCursor
+	
+	reqData = request.get_json()
+	
+	# get item information from items service
+	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
+	# print(itemInfo)
+	
+	# if a user_email is passed in, get the purchased carts associated with that user
+	cartResults = None
+	if 'user_email' in reqData:
+		# get user_id from users service
+		userId = GetUserIdFromEmail(email=reqData['user_email'])
+		
+		if userId == None:
+			return make_response(f'no user found with email {reqData["user_email"]}', 500)
+		
+		# @todo swelter: put this in a function as it's obviously used everywhere
+		# get all purchased shopping carts for specified user
+		dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status == "purchased"', (userId,))
+		cartResults = dbCursor.fetchall()
+		
+		# using the shopping cart IDs found above for the specified user, find any that contain the specified item
+		cartsContainingItem = []
+		for cart in cartResults:
+			dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
+			results = dbCursor.fetchall()
+			for result in results:
+				if result[0] not in cartsContainingItem:
+					cartsContainingItem.append(result[0])
+	else:
+		# no user_email was supplied, just get a list of cart_ids that contain the queried item
+		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ?', (itemInfo[0],))
+		cartResults = dbCursor.fetchall()
+		
+		cartsContainingItem = []
+		for result in cartResults:
+			if result[0] not in cartsContainingItem:
+				cartsContainingItem.append(result[0])
+	
+	# now we have a list of cart_ids that contain the queried item
+	# build a list of tuples, where each tuple is (cart_id, user_name, user_email)
+	# and return that
+	finalResults = []
+	for cartId in cartsContainingItem:
+		# get user_id that purchased cart
+		dbCursor.execute('SELECT user_id FROM shopping_carts WHERE id = ?', (cartId,))
+		tempUserId = dbCursor.fetchone()[0]
+		
+		tempUserInfo = GetUserInfoFromEmailOrId(userId=tempUserId)
+		
+		tempResult = (
+			cartId,
+			f"{tempUserInfo['first_name']} {tempUserInfo['last_name']}",
+			tempUserInfo['email']
+		)
+		finalResults.append(tempResult)
+	
+	return jsonify(finalResults)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()

@@ -37,6 +37,15 @@ GET_PURCHASE_QUEUED_ITEMS = {
 	"required": ["user_email"]
 }
 
+GET_ORDERS_MATCHING_ITEM = {
+	"type": "object",
+	"properties": {
+		"item_name": {"type": "string"},
+		"email": {"type": "string"}
+	},
+	"required": ["item_name"]#, "email"]
+}
+
 @app.route('/')
 def HelloWorld():
 	return "hello, world"
@@ -142,6 +151,21 @@ def ClearQueuedItems():
 		return make_response(resp.text, resp.status_code)
 	
 	return 'success'
+
+###########################################################################
+##	
+##	Clear current queue of items
+##	
+###########################################################################
+@app.route('/get_orders_containing_item', methods=['GET'])
+@expects_json(GET_ORDERS_MATCHING_ITEM)
+def GetOrdersContainingItem():
+	reqData = request.get_json()
+	
+	url = f'http://127.0.0.1:{SHOPPING_CART_SERVICE_PORT}/get_sc_containing_item'
+	resp = requests.get(url=url, data=json.dumps(reqData), headers=JSON_HEADER_DATATYPE)
+	
+	return jsonify(resp.json())
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
