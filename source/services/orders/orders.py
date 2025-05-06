@@ -168,8 +168,8 @@ def GetOrdersContainingItem():
 	return jsonify(resp.json())
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
+	# parser = argparse.ArgumentParser()
+	# parser.add_argument('--db-directory', dest='db_directory', required=True)
+	# args = parser.parse_args()
 	
-	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT, debug=True)
+	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)#, debug=True)

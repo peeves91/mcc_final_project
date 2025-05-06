@@ -1,0 +1,1 @@
+docker run -it -v C:\sandbox\mcc_final_project\db\:/app/db -p 10000:6000 ecommerce_sc:latest

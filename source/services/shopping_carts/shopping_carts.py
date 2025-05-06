@@ -426,13 +426,15 @@ def GetScContainingItem():
 	return jsonify(finalResults)
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
-	
-	dbPath = os.path.join(args.db_directory, 'shopping_carts.db')
+	# parser = argparse.ArgumentParser()
+	# parser.add_argument('--db-directory', dest='db_directory', required=True)
+	# args = parser.parse_args()
+	# print(os.getcwd())
+	# print(os.listdir())
+	# dbPath = os.path.join(args.db_directory, 'shopping_carts.db')
+	dbPath = 'db/shopping_carts.db'
 	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
 	
-	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT, debug=True)
+	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT)#, debug=True)

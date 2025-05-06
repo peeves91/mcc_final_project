@@ -1,0 +1,1 @@
+docker run -p 10000:7000 -v C:\sandbox\mcc_final_project\db\:/app/db -t ecommerce_users
