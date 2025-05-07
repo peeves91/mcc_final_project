@@ -373,42 +373,6 @@ def GetScContainingItem():
 	
 	# get item information from items service
 	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
-	# print(itemInfo)
-	
-	# # if a user_email is passed in, get the purchased carts associated with that user
-	# cartResults = None
-	# if 'user_email' in reqData:
-	# 	# get user_id from users service
-	# 	userId = GetUserIdFromEmail(email=reqData['user_email'])
-		
-	# 	if userId == None:
-	# 		return make_response(f'no user found with email {reqData["user_email"]}', 500)
-		
-	# 	# @todo swelter: put this in a function as it's obviously used everywhere
-	# 	# get all purchased shopping carts for specified user
-	# 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status == "purchased"', (userId,))
-	# 	cartResults = dbCursor.fetchall()
-		
-	# 	# using the shopping cart IDs found above for the specified user, find any that contain the specified item
-	# 	cartsContainingItem = []
-	# 	for cart in cartResults:
-	# 		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
-	# 		results = dbCursor.fetchall()
-	# 		for result in results:
-	# 			if result[0] not in cartsContainingItem:
-	# 				cartsContainingItem.append(result[0])
-	# else:
-	# 	# get all purchased shopping carts
-	# 	dbCursor.execute('SELECT id FROM shopping_carts WHERE status == "purchased"')
-	# 	cartResults = dbCursor.fetchall()
-		
-	# 	cartsContainingItem = []
-	# 	for cart in cartResults:
-	# 		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
-	# 		results = dbCursor.fetchall()
-	# 		for result in results:
-	# 			if result[0] not in cartsContainingItem:
-	# 				cartsContainingItem.append(result[0])
 	
 	# if a user_email is passed in, get the purchased carts associated with that user
 	cartResults = None
@@ -423,15 +387,6 @@ def GetScContainingItem():
 		# get all purchased shopping carts for specified user
 		dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status == "purchased"', (userId,))
 		cartResults = dbCursor.fetchall()
-		
-		# # using the shopping cart IDs found above for the specified user, find any that contain the specified item
-		# cartsContainingItem = []
-		# for cart in cartResults:
-		# 	dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
-		# 	results = dbCursor.fetchall()
-		# 	for result in results:
-		# 		if result[0] not in cartsContainingItem:
-		# 			cartsContainingItem.append(result[0])
 	else:
 		# get all purchased shopping carts
 		dbCursor.execute('SELECT id FROM shopping_carts WHERE status == "purchased"')

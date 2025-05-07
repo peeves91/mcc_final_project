@@ -225,6 +225,35 @@ def main():
 	
 	logger.info("Successfully validated that TEST_ITEM_NAMES[1] doesn't show up as purchased at all")
 	
+	# verify TEST_ITEM_NAMES[0] only shows up as purchased for second user and not first when not specifying email
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[0]}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 1
+	assert respJson[0][2] == secondUserInfo['email']
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[0] shows up as bought only by second user when no email is supplied")
+	
+	# verify TEST_ITEM_NAMES[0] only shows up as purchased for second user and not first when specifying second user's email
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[0], 'user_email': secondUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 1
+	assert respJson[0][2] == secondUserInfo['email']
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[0] shows up as bought only by second user when second user's email is supplied")
+	
+	# verify TEST_ITEM_NAMES[0] doesn't show up when searching for it in previous orders and supplying first user's email address
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[0], 'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 0
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[0] doesn't show up as purchased by first user")
+	
 	return
 
 if __name__ == '__main__':
