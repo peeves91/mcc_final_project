@@ -27,27 +27,40 @@ CREATE_USER_SCHEMA = {
 	"required": ["email", "first_name", "last_name", "phone", "address", "credit_card"]
 }
 
+GET_USER_SCHEMA = {
+	"type": "object",
+	"properties": {
+		"user_email": {"type": "string"},
+		"last_name": {"type": "string"},
+		"user_id": {"type": "integer"}
+	}
+}
+
 @app.route('/')
 def HelloWorld():
 	return "hello, world"
 
 # @todo swelter: add schema here
 @app.route('/get_user', methods=['GET'])
+@expects_json(GET_USER_SCHEMA)
 def GetUser():
 	reqData = request.get_json()
 	
 	if 'last_name' in reqData:
 		searchColumn = 'last_name'
-	elif 'id' in reqData:
+		searchData = reqData['last_name']
+	elif 'user_id' in reqData:
 		searchColumn = 'id'
-	elif 'email' in reqData:
+		searchData = reqData['user_id']
+	elif 'user_email' in reqData:
 		searchColumn = 'email'
+		searchData = reqData['user_email']
 	else:
 		return make_response('no valid search criteria specified', 500)
 	
 	usersConn = sqlite3.connect(database=dbPath)
 	usersCursor = usersConn.cursor()
-	usersCursor.execute(f'SELECT id, email, first_name, last_name, updated_at FROM users WHERE {searchColumn} = ?', (reqData[searchColumn],))
+	usersCursor.execute(f'SELECT id, email, first_name, last_name, updated_at FROM users WHERE {searchColumn} = ?', (searchData,))
 	usersResults = usersCursor.fetchall()
 	
 	profilesConn = sqlite3.connect(database=dbPath)
@@ -105,10 +118,6 @@ def CreateUser():
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	# parser.add_argument('--db-directory', dest='db_directory', required=True)
-	# args = parser.parse_args()
-	
-	# dbPath = os.path.join(args.db_directory, 'users.db')
 	dbPath = 'db/users.db'
 	
-	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT)#, debug=True)
+	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT)

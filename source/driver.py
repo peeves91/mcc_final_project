@@ -90,6 +90,7 @@ def main():
 	# clear first user's cart and ensure service returns no items in it now
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/clear_queue'
 	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	print(resp.text)
 	assert resp.status_code == 200
 	
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
@@ -228,6 +229,7 @@ def main():
 	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2], 'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
 	respJson = resp.json()
+	print(respJson)
 	assert len(respJson) == 1
 	assert respJson[0][2] == firstUserInfo['email']
 	
