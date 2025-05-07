@@ -185,6 +185,46 @@ def main():
 	
 	logger.info("Successfully validated second user's cart is empty")
 	
+	# verify TEST_ITEM_NAMES[2] shows up as bought by both users
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2]}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 2
+	assert respJson[0][2] == firstUserInfo['email']
+	assert respJson[1][2] == secondUserInfo['email']
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[2] shows as bought by both users when no email is supplied to refine search")
+	
+	# verify TEST_ITEM_NAMES[2] shows up as bought by first user when first user's email is supplied
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2], 'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 1
+	assert respJson[0][2] == firstUserInfo['email']
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[2] shows as bought by ONLY first user when email is supplied")
+	
+	# verify TEST_ITEM_NAMES[2] shows up as bought by second user when second user's email is supplied
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2], 'user_email': secondUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 1
+	assert respJson[0][2] == secondUserInfo['email']
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[2] shows as bought by ONLY first user when email is supplied")
+	
+	# verify TEST_ITEM_NAMES[1] doesn't show up as purchased, as it never was
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[1]}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 0
+	
+	logger.info("Successfully validated that TEST_ITEM_NAMES[1] doesn't show up as purchased at all")
+	
 	return
 
 if __name__ == '__main__':
