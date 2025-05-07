@@ -321,7 +321,11 @@ def PurchaseShoppingCart():
 		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('purchased', userId))
 		cartDbConn.commit()
 	
-	# @todo swelter: decrease bought items from stock via items service
+	# decrease purchased items from quantity in stock
+	for item in cartItems:
+		url = f'http://items_service:{ITEMS_SERVICE_PORT}/decrease_item_stock'
+		postData = {'item_id': item['item_id'], 'quantity': item['quantity']}
+		resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	app.logger.log(level=logging.INFO, msg=f'purchased cart for user_id={userId}')
 	

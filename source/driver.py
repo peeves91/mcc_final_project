@@ -10,12 +10,22 @@ USERS_SERVICE_PORT			= 7000
 ITEMS_SERVICE_PORT			= 8000
 
 TEST_ITEM_NAMES				= ['Zed Loafers', 'AW Bellies', 'Ladela Bellies', "Oye Boy's Dungaree"]
+TEST_ITEM_QUANTITIES		= [] # auto populated in script
 
 def main():
 	# setup logging
 	logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 	
 	logger = logging.getLogger()
+	
+	# preserve item quantities for later test assertions
+	for itemName in TEST_ITEM_NAMES:
+		url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+		resp = requests.get(url=url, data=json.dumps({'item_name': itemName}), headers=JSON_HEADER_DATATYPE)
+		assert resp.status_code == 200
+		
+		itemInfo = resp.json()['item']
+		TEST_ITEM_QUANTITIES.append(itemInfo[2])
 	
 	# create user 1
 	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/create_user'
@@ -184,6 +194,23 @@ def main():
 	assert len(respJson['items']) == 0
 	
 	logger.info("Successfully validated second user's cart is empty")
+	
+	# verify item quantities have decreased by the expected amount
+	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[0]}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	
+	itemInfo = resp.json()['item']
+	assert itemInfo[2] == TEST_ITEM_QUANTITIES[0] - 4
+	
+	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2]}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	
+	itemInfo = resp.json()['item']
+	assert itemInfo[2] == TEST_ITEM_QUANTITIES[2] - 8
+	
+	logger.info("Successfully validated all item quantities in stock have decreased by the expected amount after purchasing first and second user's shopping carts")
 	
 	# verify TEST_ITEM_NAMES[2] shows up as bought by both users
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_orders_containing_item'

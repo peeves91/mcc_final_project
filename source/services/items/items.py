@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
 import argparse
+import json
 import logging
 import os
 import sqlite3
@@ -42,6 +43,15 @@ VALIDATE_ITEMS_SCHEMA = {
 		},
 		"required": ["name", "quantity"]
 	}
+}
+
+DECREASE_ITEM_QUANTITY_SCHEMA = {
+	"type": "object",
+	"properties": {
+		"item_id": {"type": "integer"},
+		"quantity": {"type": "integer"}
+	},
+	"required": ["item_id", "quantity"]
 }
 
 ###########################################################################
@@ -93,6 +103,32 @@ def ValidateItems():
 		
 		if dbItem[2] < quantity:
 			return make_response(f'"{itemName}" not enough in stock', 500)
+	
+	return 'success'
+
+###########################################################################
+##	
+##	Validate items can all be purchased.  Returns 200 if yes, returns
+##	400 if not.
+##	
+###########################################################################
+@app.route('/decrease_item_stock', methods=['POST'])
+@expects_json(DECREASE_ITEM_QUANTITY_SCHEMA)
+def DecreaseItemStock():
+	global itemsDbConn
+	global dbLock
+	
+	reqData = request.get_json()
+	
+	itemId = reqData['item_id']
+	purchasedQuantity = reqData['quantity']
+	
+	# fetch current quantity
+	dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (itemId,))
+	existingQuantity = dbCursor.fetchall()[0][0]
+	
+	with dbLock:
+		dbCursor.execute('UPDATE items SET quantity_in_stock  = ? WHERE id = ?', (existingQuantity - purchasedQuantity, itemId,))
 	
 	return 'success'
 
