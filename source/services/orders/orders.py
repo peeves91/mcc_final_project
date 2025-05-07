@@ -41,7 +41,7 @@ GET_ORDERS_MATCHING_ITEM = {
 	"type": "object",
 	"properties": {
 		"item_name": {"type": "string"},
-		"email": {"type": "string"}
+		"user_email": {"type": "string"}
 	},
 	"required": ["item_name"]#, "email"]
 }

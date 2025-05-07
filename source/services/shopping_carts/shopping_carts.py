@@ -53,7 +53,7 @@ GET_SC_CONTAINING_ITEM = {
 	"type": "object",
 	"properties": {
 		"item_name": {"type": "string"},
-		"email": {"type": "string"}
+		"user_email": {"type": "string"}
 	},
 	"required": ["item_name"]
 }
@@ -253,7 +253,8 @@ def GetShoppingCartItems():
 	#	* price
 	cartItems = []
 	for row in itemResults:
-		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2]}
+		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
+		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
 		cartItems.append(tempItem)
 	
 	return jsonify({'items': cartItems})
@@ -299,7 +300,8 @@ def PurchaseShoppingCart():
 	#	* price
 	cartItems = []
 	for row in itemResults:
-		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2]}
+		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
+		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
 		
 		stockInfo = GetItemInfoFromNameOrId(itemId=row[0])
 		
@@ -319,7 +321,11 @@ def PurchaseShoppingCart():
 		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('purchased', userId))
 		cartDbConn.commit()
 	
-	# @todo swelter: decrease bought items from stock via items service
+	# decrease purchased items from quantity in stock
+	for item in cartItems:
+		url = f'http://items_service:{ITEMS_SERVICE_PORT}/decrease_item_stock'
+		postData = {'item_id': item['item_id'], 'quantity': item['quantity']}
+		resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	app.logger.log(level=logging.INFO, msg=f'purchased cart for user_id={userId}')
 	
@@ -371,7 +377,6 @@ def GetScContainingItem():
 	
 	# get item information from items service
 	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
-	# print(itemInfo)
 	
 	# if a user_email is passed in, get the purchased carts associated with that user
 	cartResults = None
@@ -386,22 +391,16 @@ def GetScContainingItem():
 		# get all purchased shopping carts for specified user
 		dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status == "purchased"', (userId,))
 		cartResults = dbCursor.fetchall()
-		
-		# using the shopping cart IDs found above for the specified user, find any that contain the specified item
-		cartsContainingItem = []
-		for cart in cartResults:
-			dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
-			results = dbCursor.fetchall()
-			for result in results:
-				if result[0] not in cartsContainingItem:
-					cartsContainingItem.append(result[0])
 	else:
-		# no user_email was supplied, just get a list of cart_ids that contain the queried item
-		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ?', (itemInfo[0],))
+		# get all purchased shopping carts
+		dbCursor.execute('SELECT id FROM shopping_carts WHERE status == "purchased"')
 		cartResults = dbCursor.fetchall()
-		
-		cartsContainingItem = []
-		for result in cartResults:
+	
+	cartsContainingItem = []
+	for cart in cartResults:
+		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
+		results = dbCursor.fetchall()
+		for result in results:
 			if result[0] not in cartsContainingItem:
 				cartsContainingItem.append(result[0])
 	
