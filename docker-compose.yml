@@ -1,0 +1,35 @@
+version: "2.4"
+services:
+  items_service:
+    build: ./source/services/items
+    networks:
+      - my-network
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/db
+  orders_service:
+    build: ./source/services/orders
+    networks:
+      - my-network
+    ports:
+      - "5000:5000"
+  sc_service:
+    build: ./source/services/shopping_carts
+    networks:
+      - my-network
+    ports:
+      - "6000:6000"
+    volumes:
+      - ./db:/app/db
+  users_service:
+    build: ./source/services/users
+    networks:
+      - my-network
+    ports:
+      - "7000:7000"
+    volumes:
+      - ./db:/app/db
+networks:
+  my-network:
+    driver: bridge

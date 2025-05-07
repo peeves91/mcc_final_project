@@ -97,13 +97,14 @@ def ValidateItems():
 	return 'success'
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
+	# parser = argparse.ArgumentParser()
+	# parser.add_argument('--db-directory', dest='db_directory', required=True)
+	# args = parser.parse_args()
 	
-	dbPath = os.path.join(args.db_directory, 'items.db')
+	# dbPath = os.path.join(args.db_directory, 'items.db')
+	dbPath = 'db/items.db'
 	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock
 	itemsDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = itemsDbConn.cursor()
 	
-	app.run(host='0.0.0.0', port=ITEMS_SERVICE_PORT, debug=True)
+	app.run(host='0.0.0.0', port=ITEMS_SERVICE_PORT)#, debug=True)

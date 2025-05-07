@@ -60,7 +60,7 @@ GET_SC_CONTAINING_ITEM = {
 
 # helper functions
 def GetUserInfoFromEmailOrId(email=None, userId=None):
-	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/get_user'
+	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
 	
 	if email != None:
 		getData = {'email': email}
@@ -88,7 +88,7 @@ def GetUserIdFromEmail(email: str) -> int:
 	return GetUserInfoFromEmailOrId(email=email)['user_id']
 
 def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
-	url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+	url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
 	
 	if itemName != None:
 		getData = {'item_name': itemName}
@@ -115,7 +115,7 @@ def CalculateTotalPriceOfItems(items: List[Dict]) -> float:
 	totalPrice = 0
 	
 	for index in range(len(items)):
-		url = f'http://127.0.0.1:{ITEMS_SERVICE_PORT}/get_item_info'
+		url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
 		getData = {'item_id': items[index]['item_id']}
 		resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 		
@@ -426,13 +426,15 @@ def GetScContainingItem():
 	return jsonify(finalResults)
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
-	
-	dbPath = os.path.join(args.db_directory, 'shopping_carts.db')
+	# parser = argparse.ArgumentParser()
+	# parser.add_argument('--db-directory', dest='db_directory', required=True)
+	# args = parser.parse_args()
+	# print(os.getcwd())
+	# print(os.listdir())
+	# dbPath = os.path.join(args.db_directory, 'shopping_carts.db')
+	dbPath = 'db/shopping_carts.db'
 	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
 	
-	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT, debug=True)
+	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT)#, debug=True)

@@ -105,9 +105,10 @@ def CreateUser():
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
+	# parser.add_argument('--db-directory', dest='db_directory', required=True)
+	# args = parser.parse_args()
 	
-	dbPath = os.path.join(args.db_directory, 'users.db')
+	# dbPath = os.path.join(args.db_directory, 'users.db')
+	dbPath = 'db/users.db'
 	
-	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT, debug=True)
+	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT)#, debug=True)
