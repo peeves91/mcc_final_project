@@ -65,7 +65,7 @@ def GetItemInfo():
 	else:
 		return make_response('no valid search criteria specified', 500)
 	
-	dbCursor.execute(f'SELECT id, price, quantity_in_stock FROM items WHERE {searchColumn} = ?', (searchValue,))
+	dbCursor.execute(f'SELECT id, price, quantity_in_stock, product_name FROM items WHERE {searchColumn} = ?', (searchValue,))
 	item = dbCursor.fetchall()[0]
 	
 	return jsonify({'item': item})

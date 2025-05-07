@@ -253,7 +253,8 @@ def GetShoppingCartItems():
 	#	* price
 	cartItems = []
 	for row in itemResults:
-		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2]}
+		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
+		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
 		cartItems.append(tempItem)
 	
 	return jsonify({'items': cartItems})
