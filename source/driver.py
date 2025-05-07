@@ -30,7 +30,7 @@ def main():
 	resp = requests.post(url=url, data=json.dumps(firstUserInfo), headers=JSON_HEADER_DATATYPE)
 	
 	assert resp.status_code == 200
-	logger.info(f"Successfully created user 1 w/ email {firstUserInfo['email']} (and other data)")
+	logger.info("Successfully created user 1 w/ email {firstUserInfo['email']} (and other data)")
 	
 	# create user 2
 	url = f'http://127.0.0.1:{USERS_SERVICE_PORT}/create_user'
@@ -45,7 +45,7 @@ def main():
 	resp = requests.post(url=url, data=json.dumps(secondUserInfo), headers=JSON_HEADER_DATATYPE)
 	
 	assert resp.status_code == 200
-	logger.info(f"Successfully created user 1 w/ email {secondUserInfo['email']} (and other data)")
+	logger.info("Successfully created user 1 w/ email {secondUserInfo['email']} (and other data)")
 	
 	# add 2 items to the first user's cart
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/queue_item'
@@ -62,7 +62,7 @@ def main():
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
 	
-	logger.info(f"Successfully added 2 different items to first user\'s cart")
+	logger.info("Successfully added 2 different items to first user\'s cart")
 	
 	# verify the items in user 1's cart match
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
@@ -75,7 +75,7 @@ def main():
 	assert respJson['items'][0]['quantity'] == 2
 	assert respJson['items'][1]['quantity'] == 1
 	
-	logger.info(f"Successfully validated 2 items in first user's cart")
+	logger.info("Successfully validated 2 items in first user's cart")
 	
 	# clear first user's cart and ensure service returns no items in it now
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/clear_queue'
@@ -89,7 +89,7 @@ def main():
 	respJson = resp.json()
 	assert len(respJson['items']) == 0
 	
-	logger.info(f"Successfully cleared first user's cart and verified service returns no items in it")
+	logger.info("Successfully cleared first user's cart and verified service returns no items in it")
 	
 	# add 1 items to the first user's cart
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/queue_item'
@@ -101,7 +101,7 @@ def main():
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
 	
-	logger.info(f"Successfully added 1 item to first user\'s cart")
+	logger.info("Successfully added 1 item to first user\'s cart")
 	
 	# verify the items in user 1's cart match
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
@@ -112,7 +112,7 @@ def main():
 	assert respJson['items'][0]['item_name'] == TEST_ITEM_NAMES[2]
 	assert respJson['items'][0]['quantity'] == 3
 	
-	logger.info(f"Successfully validated 2 items in first user's cart")
+	logger.info("Successfully validated 2 items in first user's cart")
 	
 	# add 2 items to the second user's cart
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/queue_item'
@@ -129,7 +129,7 @@ def main():
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
 	
-	logger.info(f"Successfully added 2 different items to first user\'s cart")
+	logger.info("Successfully added 2 different items to first user\'s cart")
 	
 	# verify the items in user 2's cart match
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
@@ -142,7 +142,48 @@ def main():
 	assert respJson['items'][0]['quantity'] == 4
 	assert respJson['items'][1]['quantity'] == 5
 	
-	logger.info(f"Successfully validated 2 items in second user's cart")
+	logger.info("Successfully validated 2 items in second user's cart")
+	
+	# purchase first user's cart
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
+	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	purchasedItems = resp.json()
+	assert len(purchasedItems['items']) == 1
+	assert purchasedItems['items'][0]['item_name'] == TEST_ITEM_NAMES[2]
+	assert purchasedItems['items'][0]['quantity'] == 3
+	
+	logger.info("Successfully purchased first user's cart and the item was what we expected")
+	
+	# purchase second user's cart
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
+	resp = requests.post(url=url, data=json.dumps({'user_email': secondUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	purchasedItems = resp.json()
+	assert len(purchasedItems['items']) == 2
+	assert purchasedItems['items'][0]['item_name'] == TEST_ITEM_NAMES[0]
+	assert purchasedItems['items'][1]['item_name'] == TEST_ITEM_NAMES[2]
+	assert purchasedItems['items'][0]['quantity'] == 4
+	assert purchasedItems['items'][1]['quantity'] == 5
+	
+	logger.info("Successfully purchased second user's cart and the items were what we expected")
+	
+	# verify first and second user's carts are empty
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
+	resp = requests.get(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson['items']) == 0
+	
+	logger.info("Successfully validated first user's cart is empty")
+	
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
+	resp = requests.get(url=url, data=json.dumps({'user_email': secondUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson['items']) == 0
+	
+	logger.info("Successfully validated second user's cart is empty")
 	
 	return
 

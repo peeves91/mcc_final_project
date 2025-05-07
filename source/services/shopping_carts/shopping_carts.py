@@ -300,7 +300,8 @@ def PurchaseShoppingCart():
 	#	* price
 	cartItems = []
 	for row in itemResults:
-		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2]}
+		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
+		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
 		
 		stockInfo = GetItemInfoFromNameOrId(itemId=row[0])
 		
