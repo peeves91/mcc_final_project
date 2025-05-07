@@ -43,8 +43,19 @@ GET_ORDERS_MATCHING_ITEM = {
 		"item_name": {"type": "string"},
 		"user_email": {"type": "string"}
 	},
-	"required": ["item_name"]#, "email"]
+	"required": ["item_name"]
 }
+
+# helper functions
+def GetUserIdFromEmail(email: str) -> int:
+	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
+	resp = requests.get(url=url, data=json.dumps({'user_email': email}), headers=JSON_HEADER_DATATYPE)
+	respJson = resp.json()
+	
+	if len(respJson['results']) == 0:
+		return None
+	
+	return respJson['results'][0]['user_id']
 
 @app.route('/')
 def HelloWorld():
@@ -60,10 +71,11 @@ def HelloWorld():
 def QueueAddItem():
 	reqData = request.get_json()
 	
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
 	# Simply ensure a cart exists
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_or_create_cart'
-	print(url)
-	postData = {'user_email': reqData['user_email']}
+	postData = {'user_id': userId}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	# if something failed here, it's quite bad, just return error
@@ -71,7 +83,7 @@ def QueueAddItem():
 		return make_response(resp.text, resp.status_code)
 	
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/add_item_to_cart'
-	postData = {'user_email': reqData['user_email'], 'item_name': reqData['item_name'], 'quantity': reqData['quantity']}
+	postData = {'user_id': userId, 'item_name': reqData['item_name'], 'quantity': reqData['quantity']}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	if resp.status_code != 200:
@@ -89,8 +101,10 @@ def QueueAddItem():
 def GetQueuedItems():
 	reqData = request.get_json()
 	
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_cart_items'
-	getData = {'user_email': reqData['user_email']}
+	getData = {'user_id': userId}
 	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 	
 	# if no cart found, return empty item list
@@ -117,8 +131,10 @@ def GetQueuedItems():
 def PurchaseQueuedItems():
 	reqData = request.get_json()
 	
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
-	postData = {'user_email': reqData['user_email']}
+	postData = {'user_id': userId}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	# if there was an error purchasing cart, return it
@@ -143,8 +159,10 @@ def PurchaseQueuedItems():
 def ClearQueuedItems():
 	reqData = request.get_json()
 	
+	userId = GetUserIdFromEmail(email=reqData['user_email'])
+	
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/cancel_cart'
-	postData = {'user_email': reqData['user_email']}
+	postData = {'user_id': userId}
 	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
 	# if there was an error cancelling the queue, return it
@@ -164,13 +182,15 @@ def GetOrdersContainingItem():
 	reqData = request.get_json()
 	
 	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_sc_containing_item'
-	resp = requests.get(url=url, data=json.dumps(reqData), headers=JSON_HEADER_DATATYPE)
+	getData = {'item_name': reqData['item_name']}
+	
+	if 'user_email' in reqData:
+		userId = GetUserIdFromEmail(email=reqData['user_email'])
+		getData['user_id'] = userId
+	
+	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
 	
 	return jsonify(resp.json())
 
 if __name__ == '__main__':
-	# parser = argparse.ArgumentParser()
-	# parser.add_argument('--db-directory', dest='db_directory', required=True)
-	# args = parser.parse_args()
-	
-	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)#, debug=True)
+	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)

@@ -26,34 +26,34 @@ dbLock = threading.Lock()
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_email": {"type": "string"}
+		"user_id": {"type": "integer"}
 	},
-	"required": ["user_email"]
+	"required": ["user_id"]
 }
 
 GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_email": {"type": "string"}
+		"user_id": {"type": "integer"}
 	},
-	"required": ["user_email"]
+	"required": ["user_id"]
 }
 
 ADD_ITEM_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"user_email": {"type": "string"},
+		"user_id": {"type": "integer"},
 		"item_name": {"type": "string"},
 		"quantity": {"type": "integer"}
 	},
-	"required": ["user_email", "item_name", "quantity"]
+	"required": ["user_id", "item_name", "quantity"]
 }
 
 GET_SC_CONTAINING_ITEM = {
 	"type": "object",
 	"properties": {
 		"item_name": {"type": "string"},
-		"user_email": {"type": "string"}
+		"user_id": {"type": "integer"}
 	},
 	"required": ["item_name"]
 }
@@ -63,9 +63,9 @@ def GetUserInfoFromEmailOrId(email=None, userId=None):
 	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
 	
 	if email != None:
-		getData = {'email': email}
+		getData = {'user_email': email}
 	elif userId != None:
-		getData = {'id': userId}
+		getData = {'user_id': userId}
 	else:
 		return None
 	
@@ -150,11 +150,7 @@ def GetOrCreateShoppingCart():
 	
 	reqData = request.get_json()
 	
-	# get user_id from users service
-	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	if userId == None:
-		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	userId = reqData['user_id']
 	
 	# check if cart exists
 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = ?', (userId, 'open',))
@@ -189,11 +185,7 @@ def AddItemToCart():
 	
 	reqData = request.get_json()
 	
-	# get user_id from users service
-	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	if userId == None:
-		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	userId = reqData['user_id']
 	
 	# get cart_id from user_Id
 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
@@ -227,11 +219,7 @@ def GetShoppingCartItems():
 	
 	reqData = request.get_json()
 	
-	# get user_id from users service
-	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	if userId == None:
-		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	userId = reqData['user_id']
 	
 	# @todo swelter: put this in a function as it's obviously used everywhere
 	# get cart_id from user_id
@@ -273,11 +261,7 @@ def PurchaseShoppingCart():
 	
 	reqData = request.get_json()
 	
-	# get user_id from users service
-	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	if userId == None:
-		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	userId = reqData['user_id']
 	
 	# get cart_id from user_Id
 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
@@ -345,11 +329,7 @@ def CancelCart():
 	
 	reqData = request.get_json()
 	
-	# get user_id from users service
-	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	if userId == None:
-		return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	userId = reqData['user_id']
 	
 	with dbLock:
 		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('cancelled', userId,))
@@ -380,12 +360,9 @@ def GetScContainingItem():
 	
 	# if a user_email is passed in, get the purchased carts associated with that user
 	cartResults = None
-	if 'user_email' in reqData:
-		# get user_id from users service
-		userId = GetUserIdFromEmail(email=reqData['user_email'])
-		
-		if userId == None:
-			return make_response(f'no user found with email {reqData["user_email"]}', 500)
+	if 'user_id' in reqData:
+		# # get user_id from users service
+		userId = reqData['user_id']
 		
 		# @todo swelter: put this in a function as it's obviously used everywhere
 		# get all purchased shopping carts for specified user
@@ -425,15 +402,8 @@ def GetScContainingItem():
 	return jsonify(finalResults)
 
 if __name__ == '__main__':
-	# parser = argparse.ArgumentParser()
-	# parser.add_argument('--db-directory', dest='db_directory', required=True)
-	# args = parser.parse_args()
-	# print(os.getcwd())
-	# print(os.listdir())
-	# dbPath = os.path.join(args.db_directory, 'shopping_carts.db')
 	dbPath = 'db/shopping_carts.db'
-	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
 	
-	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT)#, debug=True)
+	app.run(host='0.0.0.0', port=SHOPPING_CART_SERVICE_PORT)
