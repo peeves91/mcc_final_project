@@ -8,6 +8,7 @@ import pika
 import requests
 import sqlite3
 import threading
+import time
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -193,8 +194,9 @@ def GetOrdersContainingItem():
 	
 	return jsonify(resp.json())
 
-if __name__ == '__main__':
-	print('starting queue')
+def SetupRabbitMq():
+	# print('starting queue')
+	app.logger.info('starting queue')
 	# read rabbitmq connection url from environment variable
 	amqp_url = os.environ['AMQP_URL']
 	url_params = pika.URLParameters(amqp_url)
@@ -209,8 +211,17 @@ if __name__ == '__main__':
 	chan.queue_declare(queue='hello', durable=True)
 
 	# publish a 100 messages to the queue
-	for i in range(100):
+	for i in range(10):
 		chan.basic_publish(exchange='', routing_key='hello',
 						body='Hello World', properties=pika.BasicProperties(delivery_mode=2))
-		print("Produced the message")
+		# print("Produced the message")
+		app.logger.info('Produced the message')
+		time.sleep(1)
+	
+	return
+
+if __name__ == '__main__':
+	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
+	rmqThread.start()
+	
 	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)
