@@ -13,6 +13,9 @@ import time
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+# rabbitmq channel
+rmqChannel = None
+
 # constants
 JSON_HEADER_DATATYPE		= {'Content-type': 'application/json'}
 ORDER_SERVICE_PROT			= 5000
@@ -61,6 +64,10 @@ def GetUserIdFromEmail(email: str) -> int:
 
 @app.route('/')
 def HelloWorld():
+	global rmqChannel
+	
+	rmqChannel.basic_publish(exchange='', routing_key='HelloWorldQueue', body=json.dumps({'hello': 'world'}))
+	
 	return "hello, world"
 
 ###########################################################################
@@ -195,28 +202,20 @@ def GetOrdersContainingItem():
 	return jsonify(resp.json())
 
 def SetupRabbitMq():
-	# print('starting queue')
-	app.logger.info('starting queue')
+	global rmqChannel
+	
 	# read rabbitmq connection url from environment variable
-	amqp_url = os.environ['AMQP_URL']
-	url_params = pika.URLParameters(amqp_url)
-
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
 	# connect to rabbitmq
-	connection = pika.BlockingConnection(url_params)
-	chan = connection.channel()
-
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
 	# declare a new queue
-	# durable flag is set so that messages are retained
-	# in the rabbitmq volume even between restarts
-	chan.queue_declare(queue='hello', durable=True)
-
-	# publish a 100 messages to the queue
-	for i in range(10):
-		chan.basic_publish(exchange='', routing_key='hello',
-						body='Hello World', properties=pika.BasicProperties(delivery_mode=2))
-		# print("Produced the message")
-		app.logger.info('Produced the message')
-		time.sleep(1)
+	rmqChannel.queue_declare(queue='HelloWorldQueue')
 	
 	return
 

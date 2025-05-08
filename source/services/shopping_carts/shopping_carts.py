@@ -25,6 +25,9 @@ cartDbConn = None
 dbCursor = None
 dbLock = threading.Lock()
 
+# rabbitmq channel
+rmqChannel = None
+
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
 	"properties": {
@@ -404,42 +407,41 @@ def GetScContainingItem():
 	return jsonify(finalResults)
 
 def SetupRabbitMq():
+	global rmqChannel
+	
 	# read rabbitmq connection url from environment variable
-	amqp_url = os.environ['AMQP_URL']
-	url_params = pika.URLParameters(amqp_url)
-
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
 	# connect to rabbitmq
-	connection = pika.BlockingConnection(url_params)
-	chan = connection.channel()
-
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
 	# declare a new queue
-	# durable flag is set so that messages are retained
-	# in the rabbitmq volume even between restarts
-	chan.queue_declare(queue='hello', durable=True)
-
-	# to make sure the consumer receives only one message at a time
-	# next message is received only after acking the previous one
-	chan.basic_qos(prefetch_count=1)
-
-	# define the queue consumption
-	chan.basic_consume(queue='hello',
-					on_message_callback=RmqConsumeCallback)
-
-	print("Waiting to consume")
+	rmqChannel.queue_declare(queue='HelloWorldQueue')
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	
 	# start consuming
-	chan.start_consuming()
+	rmqChannel.start_consuming()
 	
 	return
 
-def RmqConsumeCallback(ch, method, properties, body):
+def RmqHelloWorldCb(channel, method, properties, body):
 	"""function to receive the message from rabbitmq
 	print it
 	sleep for 2 seconds
 	ack the message"""
 
-	e = body.decode('utf-8')
-	app.logger.info(f'RabbitMq hello world callback triggered; content: {e}')
-	ch.basic_ack(delivery_tag=method.delivery_tag)
+	# e = body.decode('utf-8')
+	# app.logger.info(f'RabbitMq hello world callback triggered; content: {e}')
+	# e = json.loads(body.decode('utf-8'))
+	data = body.decode('utf-8')
+	app.logger.info(f'RMQ: {data}')
+	# channel.basic_ack(delivery_tag=method.delivery_tag)
 
 if __name__ == '__main__':
 	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
