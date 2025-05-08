@@ -5,9 +5,11 @@ import argparse
 import json
 import logging
 import os
+import pika
 import requests
 import sqlite3
 import threading
+import time
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -401,7 +403,63 @@ def GetScContainingItem():
 	
 	return jsonify(finalResults)
 
+# def SetupRabbitMq():
+# 	return
+
 if __name__ == '__main__':
+	# read rabbitmq connection url from environment variable
+	app.logger.info('good1')
+	amqp_url = os.environ['AMQP_URL']
+	app.logger.info('good2')
+	url_params = pika.URLParameters(amqp_url)
+
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(url_params)
+	app.logger.info('good3')
+	chan = connection.channel()
+	app.logger.info('good4')
+
+	# declare a new queue
+	# durable flag is set so that messages are retained
+	# in the rabbitmq volume even between restarts
+	chan.queue_declare(queue='hello', durable=True)
+	app.logger.info('good5')
+
+
+	def receive_msg(ch, method, properties, body):
+		"""function to receive the message from rabbitmq
+		print it
+		sleep for 2 seconds
+		ack the message"""
+
+		# print('received msg : ', body.decode('utf-8'))
+		e = body.decode('utf-8')
+		# app.logger.info(str(e))
+		# app.logger.info(str(e[0]))
+		# app.logger.info(str(type(e)))
+		# app.logger.info(str(type(e[0])))
+		# app.logger.info('received msg : ', body.decode('utf-8'))
+		app.logger.info(f'received msg : {e}')
+		time.sleep(2)
+		# print('acking it')
+		app.logger.info('acking it')
+		ch.basic_ack(delivery_tag=method.delivery_tag)
+
+
+	# to make sure the consumer receives only one message at a time
+	# next message is received only after acking the previous one
+	chan.basic_qos(prefetch_count=1)
+	app.logger.info('good6')
+
+	# define the queue consumption
+	chan.basic_consume(queue='hello',
+					on_message_callback=receive_msg)
+	app.logger.info('good7')
+
+	print("Waiting to consume")
+	# start consuming
+	chan.start_consuming()
+
 	dbPath = 'db/shopping_carts.db'
 	cartDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
 	dbCursor = cartDbConn.cursor()
