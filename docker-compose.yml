@@ -16,16 +16,16 @@ services:
       - rabbit_mqdata:/usr/share/rabbitmq/data
   items_service:
     build: ./source/services/items
-    # networks:
-    #   - my-network
     ports:
       - "8000:8000"
     volumes:
       - ./db:/app/db
+    depends_on:
+      - rabbit_mq
+    environment:
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
   orders_service:
     build: ./source/services/orders
-    # networks:
-    #   - my-network
     ports:
       - "5000:5000"
     depends_on:
@@ -34,24 +34,24 @@ services:
         AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
   sc_service:
     build: ./source/services/shopping_carts
-    # networks:
-    #   - my-network
     ports:
       - "6000:6000"
     volumes:
       - ./db:/app/db
     depends_on:
-        - rabbit_mq
+      - rabbit_mq
     environment:
-        AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
   users_service:
     build: ./source/services/users
-    # networks:
-    #   - my-network
     ports:
       - "7000:7000"
     volumes:
       - ./db:/app/db
+    depends_on:
+      - rabbit_mq
+    environment:
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
 networks:
   my-network:
     driver: bridge

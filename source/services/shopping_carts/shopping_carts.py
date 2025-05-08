@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
 from typing import List, Dict
-import argparse
 import json
 import logging
 import os
@@ -9,7 +8,6 @@ import pika
 import requests
 import sqlite3
 import threading
-import time
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -420,10 +418,20 @@ def SetupRabbitMq():
 	rmqChannel = connection.channel()
 	
 	# declare a new queue
-	rmqChannel.queue_declare(queue='HelloWorldQueue')
+	# rmqChannel.queue_declare(queue='HelloWorldQueue')
+	rmqChannel.exchange_declare(exchange='testing', exchange_type='fanout')
+	result = rmqChannel.queue_declare(queue='', exclusive=True)
+	queueName = result.method.queue
+	# rmqChannel.queue_bind(exchange='testing', queue=result.method.queue)
+	rmqChannel.queue_bind(exchange='testing', queue=queueName)
+	
+	# to make sure the consumer receives only one message at a time
+	# next message is received only after acking the previous one
+	# rmqChannel.basic_qos(prefetch_count=1)
 	
 	# setup consuming queues
-	rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	# rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	rmqChannel.basic_consume(queue=result.method.queue, on_message_callback=RmqHelloWorldCb, auto_ack=True)
 	
 	# start consuming
 	rmqChannel.start_consuming()
@@ -431,21 +439,14 @@ def SetupRabbitMq():
 	return
 
 def RmqHelloWorldCb(channel, method, properties, body):
-	"""function to receive the message from rabbitmq
-	print it
-	sleep for 2 seconds
-	ack the message"""
-
-	# e = body.decode('utf-8')
-	# app.logger.info(f'RabbitMq hello world callback triggered; content: {e}')
-	# e = json.loads(body.decode('utf-8'))
 	data = body.decode('utf-8')
 	app.logger.info(f'RMQ: {data}')
 	# channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	return
 
 if __name__ == '__main__':
 	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
-	# SetupRabbitMq()
 	rmqThread.start()
 	
 	dbPath = 'db/shopping_carts.db'

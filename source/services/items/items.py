@@ -1,9 +1,9 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
-import argparse
 import json
 import logging
 import os
+import pika
 import sqlite3
 import threading
 
@@ -20,6 +20,9 @@ ITEMS_SERVICE_PORT			= 8000
 itemsDbConn = None
 dbCursor = None
 dbLock = threading.Lock()
+
+# rabbitmq channel
+rmqChannel = None
 
 @app.route('/')
 def HelloWorld():
@@ -132,7 +135,51 @@ def DecreaseItemStock():
 	
 	return 'success'
 
+def SetupRabbitMq():
+	global rmqChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
+	# declare a new queue
+	# rmqChannel.queue_declare(queue='HelloWorldQueue')
+	rmqChannel.exchange_declare(exchange='testing', exchange_type='fanout')
+	result = rmqChannel.queue_declare(queue='', exclusive=True)
+	queueName = result.method.queue
+	# rmqChannel.queue_bind(exchange='testing', queue=result.method.queue)
+	rmqChannel.queue_bind(exchange='testing', queue=queueName)
+	
+	# to make sure the consumer receives only one message at a time
+	# next message is received only after acking the previous one
+	# rmqChannel.basic_qos(prefetch_count=1)
+	
+	# setup consuming queues
+	# rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	rmqChannel.basic_consume(queue=result.method.queue, on_message_callback=RmqHelloWorldCb, auto_ack=True)
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+def RmqHelloWorldCb(channel, method, properties, body):
+	data = body.decode('utf-8')
+	app.logger.info(f'RMQ: {data}')
+	# channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	return
+
 if __name__ == '__main__':
+	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
+	rmqThread.start()
+	
 	dbPath = 'db/items.db'
 	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock
 	itemsDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)

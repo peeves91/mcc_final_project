@@ -1,12 +1,16 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
-import argparse
 import datetime
 import os
+import pika
 import sqlite3
+import threading
 
 app = Flask(__name__)
 dbPath = None
+
+# rabbitmq channel
+rmqChannel = None
 
 # constants
 ORDER_SERVICE_PROT			= 5000
@@ -116,8 +120,40 @@ def CreateUser():
 	
 	return 'success'
 
+def SetupRabbitMq():
+	global rmqChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
+	# declare a new queue
+	rmqChannel.queue_declare(queue='HelloWorldQueue')
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+def RmqHelloWorldCb(channel, method, properties, body):
+	data = body.decode('utf-8')
+	app.logger.info(f'RMQ: {data}')
+	
+	return
+
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser()
+	# rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
+	# rmqThread.start()
+	
 	dbPath = 'db/users.db'
 	
 	app.run(host='0.0.0.0', port=USERS_SERVICE_PORT)
