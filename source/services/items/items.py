@@ -87,32 +87,6 @@ def GetItemInfo():
 	
 	return jsonify({'item': item})
 
-###########################################################################
-##	
-##	Validate items can all be purchased.  Returns 200 if yes, returns
-##	400 if not.
-##	
-###########################################################################
-@app.route('/validate_items', methods=['GET'])
-@expects_json(VALIDATE_ITEMS_SCHEMA)
-def ValidateItems():
-	global itemsDbConn
-	
-	reqData = request.get_json()
-	
-	items = reqData['items']
-	for item in items:
-		itemName = item['item_name']
-		quantity = item['quantity']
-		
-		dbCursor.execute('SELECT id, price, quantity_in_stock FROM items WHERE product_name = ?', (itemName,))
-		dbItem = dbCursor.fetchall()[0]
-		
-		if dbItem[2] < quantity:
-			return make_response(f'"{itemName}" not enough in stock', 500)
-	
-	return 'success'
-
 ###################################
 #                                 #
 #                                 #
@@ -278,6 +252,9 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	app.logger.info(f'Items service consumed event in OrderItemsValidatedQueue, data is {json.dumps(parsedData)}')
 	channel.basic_ack(delivery_tag=method.delivery_tag)
 	
+	# list of tuples of (new_quantity, item_id) to write if all quantities are valid
+	dataToInsert = []
+	
 	# validate all items are in stock
 	for item in parsedData['items']:
 		dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (item['item_id'],))
@@ -297,12 +274,10 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 			
 			# order error event pubhlished, we're done here
 			return
-	
-	# if we got here, all items are valid, decrement stock
-	dataToInsert = []
-	for item in parsedData['items']:
+		
 		dataToInsert.append((quantityInStock - item['item_quantity'], item['item_id'],))
 	
+	# if we got here, all items are valid, decrement stock
 	with dbLock:
 		dbCursor.executemany('UPDATE items SET quantity_in_stock = ? WHERE id = ?', dataToInsert)
 		itemsDbConn.commit()

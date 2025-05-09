@@ -12,6 +12,7 @@ def ItemsCsvToDb(dbDirectory, csvPath):
 		isFirst = True
 		reader = csv.reader(file, delimiter=',', quotechar='"')
 		rowsToInsert = []
+		counter = 0
 		for row in reader:
 			if isFirst == True:
 				isFirst = False
@@ -21,7 +22,8 @@ def ItemsCsvToDb(dbDirectory, csvPath):
 			if row[6] == '':
 				continue
 			
-			rowsToInsert.append((row[3], row[10], int(row[6]) / 100, random.randint(100, 1000)))
+			rowsToInsert.append((row[3], row[10], int(row[6]) / 100, counter + 100))
+			counter += 1
 	
 	cursor.executemany('INSERT INTO items(product_name, description, price, quantity_in_stock) VALUES(?, ?, ?, ?)', rowsToInsert)
 	conn.commit()

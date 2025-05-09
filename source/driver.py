@@ -1,6 +1,7 @@
 import json
 import logging
 import requests
+import time
 
 # constants
 JSON_HEADER_DATATYPE		= {'Content-type': 'application/json'}
@@ -11,6 +12,22 @@ ITEMS_SERVICE_PORT			= 8000
 
 TEST_ITEM_NAMES				= ['Zed Loafers', 'AW Bellies', 'Ladela Bellies', "Oye Boy's Dungaree"]
 TEST_ITEM_QUANTITIES		= [] # auto populated in script
+
+def PollForOrderStatus(orderId: int, status: str) -> None:
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_order_status'
+	
+	while True:
+		resp = requests.get(url=url, data=json.dumps({'order_id': orderId}), headers=JSON_HEADER_DATATYPE)#, timeout=1)
+		assert resp.status_code == 200
+		
+		respJson = resp.json()
+		if respJson['order_status'] == 'purchased':
+			break
+		
+		# only poll once a second to be reasonable
+		time.sleep(1)
+	
+	return
 
 def main():
 	# setup logging
@@ -90,7 +107,6 @@ def main():
 	# clear first user's cart and ensure service returns no items in it now
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/clear_queue'
 	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
-	print(resp.text)
 	assert resp.status_code == 200
 	
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_queued_items'
@@ -159,10 +175,16 @@ def main():
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
 	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
-	purchasedItems = resp.json()
-	assert len(purchasedItems['items']) == 1
-	assert purchasedItems['items'][0]['item_name'] == TEST_ITEM_NAMES[2]
-	assert purchasedItems['items'][0]['quantity'] == 3
+	respJson = resp.json()
+	orderId = respJson['order_id']
+	PollForOrderStatus(orderId=orderId, status='purchased')
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_purchased_order_items'
+	resp = requests.get(url=url, data=json.dumps({'order_id': orderId}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 1
+	assert respJson[0]['item_name'] == TEST_ITEM_NAMES[2]
+	assert respJson[0]['quantity'] == 3
 	
 	logger.info("Successfully purchased first user's cart and the item was what we expected")
 	
@@ -170,12 +192,18 @@ def main():
 	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
 	resp = requests.post(url=url, data=json.dumps({'user_email': secondUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
-	purchasedItems = resp.json()
-	assert len(purchasedItems['items']) == 2
-	assert purchasedItems['items'][0]['item_name'] == TEST_ITEM_NAMES[0]
-	assert purchasedItems['items'][1]['item_name'] == TEST_ITEM_NAMES[2]
-	assert purchasedItems['items'][0]['quantity'] == 4
-	assert purchasedItems['items'][1]['quantity'] == 5
+	respJson = resp.json()
+	orderId = respJson['order_id']
+	PollForOrderStatus(orderId=orderId, status='purchased')
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_purchased_order_items'
+	resp = requests.get(url=url, data=json.dumps({'order_id': orderId}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert len(respJson) == 2
+	assert respJson[0]['item_name'] == TEST_ITEM_NAMES[0]
+	assert respJson[1]['item_name'] == TEST_ITEM_NAMES[2]
+	assert respJson[0]['quantity'] == 4
+	assert respJson[1]['quantity'] == 5
 	
 	logger.info("Successfully purchased second user's cart and the items were what we expected")
 	
@@ -229,7 +257,6 @@ def main():
 	resp = requests.get(url=url, data=json.dumps({'item_name': TEST_ITEM_NAMES[2], 'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
 	assert resp.status_code == 200
 	respJson = resp.json()
-	print(respJson)
 	assert len(respJson) == 1
 	assert respJson[0][2] == firstUserInfo['email']
 	

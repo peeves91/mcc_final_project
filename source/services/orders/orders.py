@@ -58,6 +58,14 @@ GET_ORDERS_MATCHING_ITEM = {
 	"required": ["item_name"]
 }
 
+GET_ORDER_STATUS = {
+	"type": "object",
+	"properties": {
+		"order_id": {"type": "integer"}
+	},
+	"required": ["order_id"]
+}
+
 # helper functions
 def GetUserIdFromEmail(email: str) -> int:
 	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
@@ -211,12 +219,12 @@ def PurchaseQueuedItems():
 		with dbLock:
 			dbCursor.execute('INSERT INTO orders(user_id, status) VALUES (?, ?)', (userId, 'pending',))
 			orderDbConn.commit()
-			cartId = dbCursor.lastrowid
+			orderId = dbCursor.lastrowid
 		
 		# publish order created event
 		eventData = {
 			'user_id': userId,
-			'order_id': cartId
+			'order_id': orderId
 		}
 		rmqOrderCreatedChannel.basic_publish(exchange='',
 											 routing_key='OrderCreatedQueue',
@@ -224,7 +232,7 @@ def PurchaseQueuedItems():
 											 properties=pika.BasicProperties(delivery_mode=2))
 		# app.logger.info('Order service published event in OrderCreatedQueue')
 	
-	return 'success'
+	return jsonify({'order_id': orderId})
 
 ###########################################################################
 ##	
@@ -250,7 +258,7 @@ def ClearQueuedItems():
 
 ###########################################################################
 ##	
-##	Clear current queue of items
+##	Get all orders containing matching item
 ##	
 ###########################################################################
 @app.route('/get_orders_containing_item', methods=['GET'])
@@ -296,6 +304,60 @@ def GetOrdersContainingItem():
 		finalResults.append(tempResult)
 	
 	return jsonify(finalResults)
+
+###########################################################################
+##	
+##	Gets status of given order_id
+##	
+###########################################################################
+@app.route('/get_order_status', methods=['GET'])
+@expects_json(GET_ORDER_STATUS)
+def GetOrderStatus():
+	global dbCursor
+	
+	reqData = request.get_json()
+	
+	dbCursor.execute('SELECT status FROM orders WHERE id = ?', (reqData['order_id'],))
+	result = dbCursor.fetchone()
+	
+	# no cart found, just return blank order status
+	if len(result) == 0:
+		orderStatus = ''
+	else:
+		orderStatus = result[0]
+	
+	return jsonify({'order_status': orderStatus})
+
+###########################################################################
+##	
+##	Gets order items
+##	
+###########################################################################
+@app.route('/get_purchased_order_items', methods=['GET'])
+@expects_json(GET_ORDER_STATUS)
+def GetPurchasedOrderItems():
+	reqData = request.get_json()
+	
+	app.logger.info(f'order_id: {reqData["order_id"]}')
+	
+	dbCursor.execute('SELECT item_id, quantity, price FROM order_items WHERE order_id = ?', (reqData['order_id'],))
+	orderItems = dbCursor.fetchall()
+	app.logger.info(f'{len(orderItems)}')
+	app.logger.info(f'{str(orderItems)}')
+	
+	items = []
+	for e in orderItems:
+		itemInfo = GetItemInfoFromNameOrId(itemId=e[0])
+		
+		tempItem = {
+			'item_id': itemInfo[0],
+			'item_name': itemInfo[3],
+			'quantity': e[1],
+			'price': e[2]
+		}
+		items.append(tempItem)
+	
+	return jsonify(items)
 
 ###################################
 #                                 #
