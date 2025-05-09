@@ -111,32 +111,6 @@ def ValidateItems():
 	
 	return 'success'
 
-# ###########################################################################
-# ##	
-# ##	Validate items can all be purchased.  Returns 200 if yes, returns
-# ##	400 if not.
-# ##	
-# ###########################################################################
-# @app.route('/decrease_item_stock', methods=['POST'])
-# @expects_json(DECREASE_ITEM_QUANTITY_SCHEMA)
-# def DecreaseItemStock():
-# 	global itemsDbConn
-# 	global dbLock
-	
-# 	reqData = request.get_json()
-	
-# 	itemId = reqData['item_id']
-# 	purchasedQuantity = reqData['quantity']
-	
-# 	# fetch current quantity
-# 	dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (itemId,))
-# 	existingQuantity = dbCursor.fetchall()[0][0]
-	
-# 	with dbLock:
-# 		dbCursor.execute('UPDATE items SET quantity_in_stock  = ? WHERE id = ?', (existingQuantity - purchasedQuantity, itemId,))
-	
-# 	return 'success'
-
 ###################################
 #                                 #
 #                                 #
@@ -287,13 +261,8 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	# if we got here, all items are valid, decrement stock
 	dataToInsert = []
 	for item in parsedData['items']:
-			# app.logger.info(str(item['item_quantity']))
-			# app.logger.info(str(item['item_id']))
-			# app.logger.info(str(type(item['item_quantity'])))
-			# app.logger.info(str(type(item['item_id'])))
 		dataToInsert.append((quantityInStock - item['item_quantity'], item['item_id'],))
 	with dbLock:
-		# dbCursor.execute('UPDATE items SET quantity_in_stock = ? WHERE id = ?', (quantityInStock - item['item_quantity'], item['item_id'],))
 		dbCursor.executemany('UPDATE items SET quantity_in_stock = ? WHERE id = ?', dataToInsert)
 		itemsDbConn.commit()
 	
