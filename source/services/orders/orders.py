@@ -69,6 +69,55 @@ def GetUserIdFromEmail(email: str) -> int:
 	
 	return respJson['results'][0]['user_id']
 
+def GetUserInfoFromEmailOrId(email=None, userId=None):
+	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
+	
+	if email != None:
+		getData = {'user_email': email}
+	elif userId != None:
+		getData = {'user_id': userId}
+	else:
+		return None
+	
+	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+	
+	try:
+		respJson = resp.json()
+	except requests.exceptions.JSONDecodeError:
+		return None
+	
+	# if no users found, return None
+	if len(respJson['results']) == 0:
+		return None
+	
+	foundUser = respJson['results'][0]
+	
+	return foundUser
+
+def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
+	url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
+	
+	if itemName != None:
+		getData = {'item_name': itemName}
+	elif itemId != None:
+		getData = {'item_id': itemId}
+	else:
+		return None
+	
+	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+	
+	if resp.status_code != 200:
+		return make_response(resp.text, resp.status_code)
+	
+	try:
+		respJson = resp.json()
+	except requests.exceptions.JSONDecodeError:
+		return None
+	
+	# @todo swelter: handle item not found here
+	
+	return respJson['item']
+
 @app.route('/')
 def HelloWorld():
 	global rmqHelloWorldChannel
@@ -209,16 +258,44 @@ def ClearQueuedItems():
 def GetOrdersContainingItem():
 	reqData = request.get_json()
 	
-	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_sc_containing_item'
-	getData = {'item_name': reqData['item_name']}
+	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
 	
+	# if user email is supplied, filter by the ID, otherwise just get all purchased carts
 	if 'user_email' in reqData:
 		userId = GetUserIdFromEmail(email=reqData['user_email'])
-		getData['user_id'] = userId
+		
+		dbCursor.execute('SELECT id FROM orders WHERE user_id = ? AND status == "purchased"', (userId,))
+		ordersToSearch = dbCursor.fetchall()
+	else:
+		dbCursor.execute('SELECT id FROM orders WHERE status == "purchased"')
+		ordersToSearch = dbCursor.fetchall()
 	
-	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
+	# go thru all orders that match search criteria, and extract order_id whenever the order contains the matching item_id
+	ordersContainingItem = []
+	for order in ordersToSearch:
+		dbCursor.execute('SELECT order_id FROM order_items WHERE item_id = ? AND order_id = ?', (itemInfo[0], order[0],))
+		results = dbCursor.fetchall()
+		for result in results:
+			if result[0] not in ordersContainingItem:
+				ordersContainingItem.append(result[0])
 	
-	return jsonify(resp.json())
+	# build list of tuples, where each tuple is (orderId, first and last name, user email)
+	finalResults = []
+	for orderId in ordersContainingItem:
+		# get user_id that purchased the order
+		dbCursor.execute('SELECT user_id FROM orders WHERE id = ?', (orderId,))
+		tempUserId = dbCursor.fetchone()[0]
+		
+		tempUserInfo = GetUserInfoFromEmailOrId(userId=tempUserId)
+		
+		tempResult = (
+			orderId,
+			f"{tempUserInfo['first_name']} {tempUserInfo['last_name']}",
+			tempUserInfo['email']
+		)
+		finalResults.append(tempResult)
+	
+	return jsonify(finalResults)
 
 ###################################
 #                                 #

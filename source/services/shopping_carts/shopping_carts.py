@@ -281,65 +281,6 @@ def CancelCart():
 	
 	return 'success'
 
-###########################################################################
-##	
-##	Returns all purchased shopping carts containing the passed in item,
-##	including details about the user that ordered it
-##	
-###########################################################################
-@app.route('/get_sc_containing_item', methods=['GET'])
-@expects_json(GET_SC_CONTAINING_ITEM)
-def GetScContainingItem():
-	global dbCursor
-	
-	reqData = request.get_json()
-	
-	# get item information from items service
-	itemInfo = GetItemInfoFromNameOrId(itemName=reqData['item_name'])
-	
-	# if a user_email is passed in, get the purchased carts associated with that user
-	cartResults = None
-	if 'user_id' in reqData:
-		# # get user_id from users service
-		userId = reqData['user_id']
-		
-		# @todo swelter: put this in a function as it's obviously used everywhere
-		# get all purchased shopping carts for specified user
-		dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status == "purchased"', (userId,))
-		cartResults = dbCursor.fetchall()
-	else:
-		# get all purchased shopping carts
-		dbCursor.execute('SELECT id FROM shopping_carts WHERE status == "purchased"')
-		cartResults = dbCursor.fetchall()
-	
-	cartsContainingItem = []
-	for cart in cartResults:
-		dbCursor.execute('SELECT cart_id FROM shopping_cart_items WHERE item_id = ? AND cart_id = ?', (itemInfo[0], cart[0],))
-		results = dbCursor.fetchall()
-		for result in results:
-			if result[0] not in cartsContainingItem:
-				cartsContainingItem.append(result[0])
-	
-	# now we have a list of cart_ids that contain the queried item
-	# build a list of tuples, where each tuple is (cart_id, user_name, user_email)
-	# and return that
-	finalResults = []
-	for cartId in cartsContainingItem:
-		# get user_id that purchased cart
-		dbCursor.execute('SELECT user_id FROM shopping_carts WHERE id = ?', (cartId,))
-		tempUserId = dbCursor.fetchone()[0]
-		
-		tempUserInfo = GetUserInfoFromEmailOrId(userId=tempUserId)
-		
-		tempResult = (
-			cartId,
-			f"{tempUserInfo['first_name']} {tempUserInfo['last_name']}",
-			tempUserInfo['email']
-		)
-		finalResults.append(tempResult)
-	
-	return jsonify(finalResults)
-
 ###################################
 #                                 #
 #                                 #
