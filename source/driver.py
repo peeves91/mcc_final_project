@@ -21,7 +21,7 @@ def PollForOrderStatus(orderId: int, status: str) -> None:
 		assert resp.status_code == 200
 		
 		respJson = resp.json()
-		if respJson['order_status'] == 'purchased':
+		if respJson['order_status'] == status:
 			break
 		
 		# only poll once a second to be reasonable
@@ -309,6 +309,45 @@ def main():
 	assert len(respJson) == 0
 	
 	logger.info("Successfully validated that TEST_ITEM_NAMES[0] doesn't show up as purchased by first user")
+	
+	# verify that no shopping cart open sets order status to no_sc_found
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
+	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	orderId = respJson['order_id']
+	PollForOrderStatus(orderId=orderId, status='no_sc_found')
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_order_status'
+	resp = requests.get(url=url, data=json.dumps({'order_id': orderId}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert respJson['order_status'] == 'no_sc_found'
+	
+	logger.info("Successfully validated that order status gets set to 'no_sc_found' if purchasing an empty cart")
+	
+	# verify that purchasing more items than are in stock sets order status to not_enough_in_stock
+	# add 1 items to the first user's cart
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/queue_item'
+	postData = {
+		'user_email': firstUserInfo['email'],
+		'item_name': TEST_ITEM_NAMES[2],
+		'quantity': 10000,
+	}
+	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/purchase_queue'
+	resp = requests.post(url=url, data=json.dumps({'user_email': firstUserInfo['email']}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	orderId = respJson['order_id']
+	PollForOrderStatus(orderId=orderId, status='not_enough_in_stock')
+	url = f'http://127.0.0.1:{ORDER_SERVICE_PROT}/get_order_status'
+	resp = requests.get(url=url, data=json.dumps({'order_id': orderId}), headers=JSON_HEADER_DATATYPE)
+	assert resp.status_code == 200
+	respJson = resp.json()
+	assert respJson['order_status'] == 'not_enough_in_stock'
+	
+	logger.info("Successfully validated that order status gets set to 'not_enough_in_stock' if buying more than in stock")
 	
 	return
 

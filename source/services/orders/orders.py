@@ -314,11 +314,13 @@ def GetOrdersContainingItem():
 @expects_json(GET_ORDER_STATUS)
 def GetOrderStatus():
 	global dbCursor
+	global dbLock
 	
 	reqData = request.get_json()
 	
-	dbCursor.execute('SELECT status FROM orders WHERE id = ?', (reqData['order_id'],))
-	result = dbCursor.fetchone()
+	with dbLock:
+		dbCursor.execute('SELECT status FROM orders WHERE id = ?', (reqData['order_id'],))
+		result = dbCursor.fetchone()
 	
 	# no cart found, just return blank order status
 	if len(result) == 0:
