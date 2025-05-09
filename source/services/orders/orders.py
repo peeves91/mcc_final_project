@@ -5,12 +5,15 @@ import logging
 import os
 import pika
 import requests
+import sqlite3
 import threading
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
-# rabbitmq channels
+orderDbConn = None
+dbCursor = None
+dbLock = threading.Lock()
 
 # channel for publishing hello world events
 rmqHelloWorldChannel		= None
@@ -144,6 +147,9 @@ def GetQueuedItems():
 def PurchaseQueuedItems():
 	global rmqOrderCreatedChannel
 	global orderCreatedChannelLock
+	global orderDbConn
+	global dbCursor
+	global dbLock
 	
 	reqData = request.get_json()
 	
@@ -152,6 +158,11 @@ def PurchaseQueuedItems():
 	# @todo swelter: create new cart and get the cart_id here
 	
 	with orderCreatedChannelLock:
+		with dbLock:
+			dbCursor.execute('INSERT INTO orders(user_id, status) VALUES (?, ?)', (userId, 'pending',))
+			orderDbConn.commit()
+			cartId = dbCursor.lastrowid
+		
 		# url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
 		# postData = {'user_id': userId}
 		# resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
@@ -169,11 +180,15 @@ def PurchaseQueuedItems():
 		# return jsonify(respJson)
 		
 		# publish order created event
+		eventData = {
+			'user_id': userId,
+			'order_id': cartId
+		}
 		rmqOrderCreatedChannel.basic_publish(exchange='',
-											routing_key='OrderCreatedQueue',
-											body=json.dumps({'user_id': userId}),
-											properties=pika.BasicProperties(delivery_mode=2))
-		app.logger.info('Order service published event in OrderCreatedQueue')
+											 routing_key='OrderCreatedQueue',
+											 body=json.dumps(eventData),
+											 properties=pika.BasicProperties(delivery_mode=2))
+		# app.logger.info('Order service published event in OrderCreatedQueue')
 	
 	return 'success'
 
@@ -343,5 +358,9 @@ def OrderItemsValidatedCallback(channel, method, properties, body):
 
 if __name__ == '__main__':
 	RabbitMqInit()
+	
+	dbPath = 'db/orders.db'
+	orderDbConn = sqlite3.connect(database=dbPath, check_same_thread=False)
+	dbCursor = orderDbConn.cursor()
 	
 	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)

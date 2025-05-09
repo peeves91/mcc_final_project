@@ -28,6 +28,8 @@ services:
     build: ./source/services/orders
     ports:
       - "5000:5000"
+    volumes:
+      - ./db:/app/db
     depends_on:
         - rabbit_mq
     environment:

@@ -280,7 +280,7 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 												 routing_key='OrderItemsValidatedQueue',
 												 body=json.dumps(parsedData),
 												 properties=pika.BasicProperties(delivery_mode=2))
-		app.logger.info(f'Items service published event in OrderItemsValidatedQueue')
+		# app.logger.info(f'Items service published event in OrderItemsValidatedQueue')
 	
 	return
 

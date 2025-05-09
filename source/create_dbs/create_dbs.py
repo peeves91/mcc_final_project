@@ -15,17 +15,17 @@ def CreateOrderDb(dbDirectory, removeExisting):
 	cursor.execute('CREATE TABLE orders(' \
 		'id INTEGER PRIMARY KEY AUTOINCREMENT,' \
 		'user_id INTEGER,' \
-		'status TEXT,' \
-		'total_price DECIMAL,' \
-		'created_at TIMESTAMP,' \
-		'updated_at TIMESTAMP)')
+		'status TEXT)')#,' \
+		# 'total_price DECIMAL,' \
+		# 'created_at TIMESTAMP,' \
+		# 'updated_at TIMESTAMP)')
 	
 	cursor.execute('CREATE TABLE order_items(' \
 		'id INTEGER PRIMARY KEY AUTOINCREMENT,' \
 		'order_id INTEGER,' \
 		'item_id INTEGER,' \
-		'quantity INTEGER,' \
-		'price DECIMAL)')
+		'quantity INTEGER)')#,' \
+		# 'price DECIMAL)')
 
 def CreateUserDb(dbDirectory, removeExisting):
 	dbPath = os.path.join(dbDirectory, 'users.db')

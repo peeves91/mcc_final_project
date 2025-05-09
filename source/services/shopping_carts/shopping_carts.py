@@ -542,14 +542,40 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	app.logger.info(f'Shopping carts service consumed event in OrderCreatedQueue, data is {json.dumps(parsedData)}')
 	channel.basic_ack(delivery_tag=method.delivery_tag)
 	
+	userId = parsedData['user_id']
+	orderId = parsedData['order_id']
+	
 	# @todo swelter: mark shopping cart as closed and fetch all items in the cart
+	# get cart_id from user_Id
+	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
+	cartResults = dbCursor.fetchone()
+	
+	# # return 500 error if no cart found
+	# if cartResults == None:
+	# 	return make_response('no_cart', 500)
+	# @todo swelter: handle failure here by emitting OrderFailed event
+	
+	cartId = cartResults[0]
+	
+	dbCursor.execute('SELECT item_id, quantity FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
+	itemResults = dbCursor.fetchall()
+	
+	orderItems = []
+	for item in itemResults:
+		tempItem = {'item_id': item[0], 'item_quantity': item[1]}
+		orderItems.append(tempItem)
 	
 	with shoppingCartValidatedChannelLock:
+		eventData = {
+			'user_id': userId,
+			'order_id': orderId,
+			'items': orderItems
+		}
 		shoppingCartValidatedChannel.basic_publish(exchange='',
 												   routing_key='ShoppingCartValidatedQueue',
-												   body=json.dumps(parsedData),
+												   body=json.dumps(eventData),
 												   properties=pika.BasicProperties(delivery_mode=2))
-		app.logger.info(f'Shopping cart service published event in ShoppingCartValidatedQueue')
+		# app.logger.info(f'Shopping cart service published event in ShoppingCartValidatedQueue')
 	
 	return
 
