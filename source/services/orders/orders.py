@@ -10,8 +10,15 @@ import threading
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
-# rabbitmq channel
-rmqChannel = None
+# rabbitmq channels
+
+# channel for publishing hello world events
+rmqHelloWorldChannel		= None
+
+# channel for publishing order created events
+rmqOrderCreatedChannel		= None
+orderCreatedChannelLock		= threading.Lock()
+orderItemsValidatedChannel	= None
 
 # constants
 JSON_HEADER_DATATYPE		= {'Content-type': 'application/json'}
@@ -61,10 +68,9 @@ def GetUserIdFromEmail(email: str) -> int:
 
 @app.route('/')
 def HelloWorld():
-	global rmqChannel
+	global rmqHelloWorldChannel
 	
-	# rmqChannel.basic_publish(exchange='', routing_key='HelloWorldQueue', body=json.dumps({'hello': 'world'}), properties=pika.BasicProperties(delivery_mode=2))
-	rmqChannel.basic_publish(exchange='HelloWorldTesting', routing_key='', body=json.dumps({'hello': 'world'}))
+	rmqHelloWorldChannel.basic_publish(exchange='HelloWorldTesting', routing_key='', body=json.dumps({'hello': 'world'}))
 	
 	return "hello, world"
 
@@ -136,25 +142,40 @@ def GetQueuedItems():
 @app.route('/purchase_queue', methods=['POST'])
 @expects_json(GET_PURCHASE_QUEUED_ITEMS)
 def PurchaseQueuedItems():
+	global rmqOrderCreatedChannel
+	global orderCreatedChannelLock
+	
 	reqData = request.get_json()
 	
 	userId = GetUserIdFromEmail(email=reqData['user_email'])
 	
-	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
-	postData = {'user_id': userId}
-	resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
+	# @todo swelter: create new cart and get the cart_id here
 	
-	# if there was an error purchasing cart, return it
-	if resp.status_code != 200:
-		return make_response(resp.text, resp.status_code)
+	with orderCreatedChannelLock:
+		# url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
+		# postData = {'user_id': userId}
+		# resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
+		
+		# # if there was an error purchasing cart, return it
+		# if resp.status_code != 200:
+		# 	return make_response(resp.text, resp.status_code)
+		
+		# try:
+		# 	respJson = resp.json()
+		# except requests.exceptions.JSONDecodeError:
+		# 	return make_response('failed to decode json purchasing cart items', 500)
+		
+		# return purchased items
+		# return jsonify(respJson)
+		
+		# publish order created event
+		rmqOrderCreatedChannel.basic_publish(exchange='',
+											routing_key='OrderCreatedQueue',
+											body=json.dumps({'user_id': userId}),
+											properties=pika.BasicProperties(delivery_mode=2))
+		app.logger.info('Order service published event in OrderCreatedQueue')
 	
-	try:
-		respJson = resp.json()
-	except requests.exceptions.JSONDecodeError:
-		return make_response('failed to decode json purchasing cart items', 500)
-	
-	# return purchased items
-	return jsonify(respJson)
+	return 'success'
 
 ###########################################################################
 ##	
@@ -199,9 +220,85 @@ def GetOrdersContainingItem():
 	
 	return jsonify(resp.json())
 
-def SetupRabbitMq():
-	global rmqChannel
+###################################
+#                                 #
+#                                 #
+#            RABBIT MQ            #
+#                                 #
+#                                 #
+###################################
+
+###########################################################################
+##	
+##	RabbitMq initialization
+##	
+###########################################################################
+def RabbitMqInit():
+	# setup hello world publisher
+	setupHelloWorldPublisherThread = threading.Thread(target=SetupRabbitMqHelloWorldPublisher, daemon=True)
+	setupHelloWorldPublisherThread.start()
 	
+	# setup order created publisher
+	orderCreatedPublisherThread = threading.Thread(target=SetupRabbitMqOrderCreatedPublisher, daemon=True)
+	orderCreatedPublisherThread.start()
+	
+	# setup order items validated consumer
+	orderItemsValidatedConsumerThread = threading.Thread(target=SetupRabbitMqOrderItemsValidatedConsumer, daemon=True)
+	orderItemsValidatedConsumerThread.start()
+	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq hello world consumer
+##	
+###########################################################################
+def SetupRabbitMqHelloWorldPublisher():
+	global rmqHelloWorldChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqHelloWorldChannel = connection.channel()
+	
+	# declare a new queue
+	rmqHelloWorldChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
+	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq order created publisher
+##	
+###########################################################################
+def SetupRabbitMqOrderCreatedPublisher():
+	global rmqOrderCreatedChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqOrderCreatedChannel = connection.channel()
+	
+	rmqOrderCreatedChannel.queue_declare(queue='OrderCreatedQueue')
+	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq order items validated consumer
+##	
+###########################################################################
+def SetupRabbitMqOrderItemsValidatedConsumer():
 	# read rabbitmq connection url from environment variable
 	amqpUrl = os.environ['AMQP_URL']
 	urlParams = pika.URLParameters(amqpUrl)
@@ -213,12 +310,38 @@ def SetupRabbitMq():
 	rmqChannel = connection.channel()
 	
 	# declare a new queue
-	rmqChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
+	rmqChannel.queue_declare(queue='OrderItemsValidatedQueue')
+	rmqChannel.basic_qos(prefetch_count=1)
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='OrderItemsValidatedQueue',
+							 on_message_callback=OrderItemsValidatedCallback)
+	
+	rmqChannel.start_consuming()
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+###########################################################################
+##	
+##	RabbitMq hello world consume callback
+##	
+###########################################################################
+def OrderItemsValidatedCallback(channel, method, properties, body):
+	global orderItemsValidatedChannel
+	
+	data = body.decode('utf-8')
+	parsedData = json.loads(data)
+	app.logger.info(f'Order service consumed event in OrderItemsValidatedQueue, data is {json.dumps(parsedData)}')
+	channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	# @todo swelter: mark the order as purchased
 	
 	return
 
 if __name__ == '__main__':
-	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
-	rmqThread.start()
+	RabbitMqInit()
 	
 	app.run(host='0.0.0.0', port=ORDER_SERVICE_PROT)

@@ -23,6 +23,8 @@ dbLock = threading.Lock()
 
 # rabbitmq channel
 rmqChannel = None
+orderItemsValidatedChannel = None
+orderItemsValidatedChannelLock = threading.Lock()
 
 @app.route('/')
 def HelloWorld():
@@ -109,31 +111,39 @@ def ValidateItems():
 	
 	return 'success'
 
-###########################################################################
-##	
-##	Validate items can all be purchased.  Returns 200 if yes, returns
-##	400 if not.
-##	
-###########################################################################
-@app.route('/decrease_item_stock', methods=['POST'])
-@expects_json(DECREASE_ITEM_QUANTITY_SCHEMA)
-def DecreaseItemStock():
-	global itemsDbConn
-	global dbLock
+# ###########################################################################
+# ##	
+# ##	Validate items can all be purchased.  Returns 200 if yes, returns
+# ##	400 if not.
+# ##	
+# ###########################################################################
+# @app.route('/decrease_item_stock', methods=['POST'])
+# @expects_json(DECREASE_ITEM_QUANTITY_SCHEMA)
+# def DecreaseItemStock():
+# 	global itemsDbConn
+# 	global dbLock
 	
-	reqData = request.get_json()
+# 	reqData = request.get_json()
 	
-	itemId = reqData['item_id']
-	purchasedQuantity = reqData['quantity']
+# 	itemId = reqData['item_id']
+# 	purchasedQuantity = reqData['quantity']
 	
-	# fetch current quantity
-	dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (itemId,))
-	existingQuantity = dbCursor.fetchall()[0][0]
+# 	# fetch current quantity
+# 	dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (itemId,))
+# 	existingQuantity = dbCursor.fetchall()[0][0]
 	
-	with dbLock:
-		dbCursor.execute('UPDATE items SET quantity_in_stock  = ? WHERE id = ?', (existingQuantity - purchasedQuantity, itemId,))
+# 	with dbLock:
+# 		dbCursor.execute('UPDATE items SET quantity_in_stock  = ? WHERE id = ?', (existingQuantity - purchasedQuantity, itemId,))
 	
-	return 'success'
+# 	return 'success'
+
+###################################
+#                                 #
+#                                 #
+#            RABBIT MQ            #
+#                                 #
+#                                 #
+###################################
 
 ###########################################################################
 ##	
@@ -141,8 +151,17 @@ def DecreaseItemStock():
 ##	
 ###########################################################################
 def RabbitMqInit():
+	# setup hello world consumer
 	helloWorldThread = threading.Thread(target=SetupRabbitMqHelloWorldConsumer, daemon=True)
 	helloWorldThread.start()
+	
+	# setup order created consumer
+	shoppingCartValidatedConsumerThread = threading.Thread(target=SetupRabbitMqShoppingCartValidatedConsumer, daemon=True)
+	shoppingCartValidatedConsumerThread.start()
+	
+	# setup shopping cart validated producer
+	orderItemsValidatedProducerThread = threading.Thread(target=SetupRabbitMqOrderItemsValidatedProducer, daemon=True)
+	orderItemsValidatedProducerThread.start()
 	
 	return
 
@@ -178,12 +197,90 @@ def SetupRabbitMqHelloWorldConsumer():
 
 ###########################################################################
 ##	
+##	Setup RabbitMq shopping cart validated consumer
+##	
+###########################################################################
+def SetupRabbitMqShoppingCartValidatedConsumer():
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
+	# declare a new queue
+	rmqChannel.queue_declare(queue='ShoppingCartValidatedQueue')
+	rmqChannel.basic_qos(prefetch_count=1)
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='ShoppingCartValidatedQueue',
+							 on_message_callback=RmqOrderCreatedCallback)
+	
+	rmqChannel.start_consuming()
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq order items validated producer
+##	
+###########################################################################
+def SetupRabbitMqOrderItemsValidatedProducer():
+	global orderItemsValidatedChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	orderItemsValidatedChannel = connection.channel()
+	
+	orderItemsValidatedChannel.queue_declare(queue='OrderItemsValidatedQueue')
+	
+	return
+
+###########################################################################
+##	
 ##	RabbitMq hello world consume callback
 ##	
 ###########################################################################
 def RmqHelloWorldCb(channel, method, properties, body):
 	data = body.decode('utf-8')
 	app.logger.info(f'RMQ: {data}')
+	
+	return
+
+###########################################################################
+##	
+##	RabbitMq order created consume callback
+##	
+###########################################################################
+def RmqOrderCreatedCallback(channel, method, properties, body):
+	global orderItemsValidatedChannel
+	global orderItemsValidatedChannelLock
+	
+	data = body.decode('utf-8')
+	parsedData = json.loads(data)
+	app.logger.info(f'Items service consumed event in OrderItemsValidatedQueue, data is {json.dumps(parsedData)}')
+	channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	# @todo swelter: decrement items from stock if valid here
+	
+	with orderItemsValidatedChannelLock:
+		orderItemsValidatedChannel.basic_publish(exchange='',
+												 routing_key='OrderItemsValidatedQueue',
+												 body=json.dumps(parsedData),
+												 properties=pika.BasicProperties(delivery_mode=2))
+		app.logger.info(f'Items service published event in OrderItemsValidatedQueue')
 	
 	return
 

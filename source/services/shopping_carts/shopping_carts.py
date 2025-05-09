@@ -25,6 +25,8 @@ dbLock = threading.Lock()
 
 # rabbitmq channel
 rmqChannel = None
+shoppingCartValidatedChannel = None
+shoppingCartValidatedChannelLock = threading.Lock()
 
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
@@ -255,68 +257,68 @@ def GetShoppingCartItems():
 ##	Marks a cart as closed and returns all associated items with it.
 ##	
 ###########################################################################
-@app.route('/purchase_cart', methods=['POST'])
-@expects_json(GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA)
-def PurchaseShoppingCart():
-	global cartDbConn
-	global dbCursor
-	global dbLock
+# @app.route('/purchase_cart', methods=['POST'])
+# @expects_json(GET_PURCHASE_CANCEL_SHOPPING_CART_SCHEMA)
+# def PurchaseShoppingCart():
+# 	global cartDbConn
+# 	global dbCursor
+# 	global dbLock
 	
-	reqData = request.get_json()
+# 	reqData = request.get_json()
 	
-	userId = reqData['user_id']
+# 	userId = reqData['user_id']
 	
-	# get cart_id from user_Id
-	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
-	cartResults = dbCursor.fetchone()
+# 	# get cart_id from user_Id
+# 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
+# 	cartResults = dbCursor.fetchone()
 	
-	# return 500 error if no cart found
-	if cartResults == None:
-		return make_response('no_cart', 500)
+# 	# return 500 error if no cart found
+# 	if cartResults == None:
+# 		return make_response('no_cart', 500)
 	
-	cartId = cartResults[0]
+# 	cartId = cartResults[0]
 	
-	dbCursor.execute('SELECT item_id, quantity, price FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
-	itemResults = dbCursor.fetchall()
+# 	dbCursor.execute('SELECT item_id, quantity, price FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
+# 	itemResults = dbCursor.fetchall()
 	
-	# @todo swelter: add a simple payment service for additional complexity
+# 	# @todo swelter: add a simple payment service for additional complexity
 	
-	# list of tuples of cart items, format:
-	#	* item_id
-	#	* quantity
-	#	* price
-	cartItems = []
-	for row in itemResults:
-		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
-		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
+# 	# list of tuples of cart items, format:
+# 	#	* item_id
+# 	#	* quantity
+# 	#	* price
+# 	cartItems = []
+# 	for row in itemResults:
+# 		tempInfo = GetItemInfoFromNameOrId(itemId=row[0])
+# 		tempItem = {'item_id': row[0], 'quantity': row[1], 'price': row[2], 'item_name': tempInfo[3]}
 		
-		stockInfo = GetItemInfoFromNameOrId(itemId=row[0])
+# 		stockInfo = GetItemInfoFromNameOrId(itemId=row[0])
 		
-		if stockInfo[2] < tempItem['quantity']:
-			return make_response(f'item_id {tempItem["item_id"]} has {stockInfo[2]} in stock, {tempItem["quantity"]} requested', 500)
+# 		if stockInfo[2] < tempItem['quantity']:
+# 			return make_response(f'item_id {tempItem["item_id"]} has {stockInfo[2]} in stock, {tempItem["quantity"]} requested', 500)
 		
-		cartItems.append(tempItem)
+# 		cartItems.append(tempItem)
 	
-	# if we get here, cart is validated
-	totalPrice = CalculateTotalPriceOfItems(items=cartItems)
+# 	# if we get here, cart is validated
+# 	totalPrice = CalculateTotalPriceOfItems(items=cartItems)
 	
-	if totalPrice == None:
-		return make_response('error calculating shopping cart total', 500)
+# 	if totalPrice == None:
+# 		return make_response('error calculating shopping cart total', 500)
 	
-	# mark cart as purchased
-	with dbLock:
-		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('purchased', userId))
-		cartDbConn.commit()
+# 	# mark cart as purchased
+# 	with dbLock:
+# 		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE user_id = ? AND status = "open"', ('purchased', userId))
+# 		cartDbConn.commit()
 	
-	# decrease purchased items from quantity in stock
-	for item in cartItems:
-		url = f'http://items_service:{ITEMS_SERVICE_PORT}/decrease_item_stock'
-		postData = {'item_id': item['item_id'], 'quantity': item['quantity']}
-		resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
+# 	# decrease purchased items from quantity in stock
+# 	for item in cartItems:
+# 		url = f'http://items_service:{ITEMS_SERVICE_PORT}/decrease_item_stock'
+# 		postData = {'item_id': item['item_id'], 'quantity': item['quantity']}
+# 		resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
 	
-	app.logger.log(level=logging.INFO, msg=f'purchased cart for user_id={userId}')
+# 	app.logger.log(level=logging.INFO, msg=f'purchased cart for user_id={userId}')
 	
-	return jsonify({'items': cartItems, 'total_price': totalPrice})
+# 	return jsonify({'items': cartItems, 'total_price': totalPrice})
 
 ###########################################################################
 ##	
@@ -404,14 +406,31 @@ def GetScContainingItem():
 	
 	return jsonify(finalResults)
 
+###################################
+#                                 #
+#                                 #
+#            RABBIT MQ            #
+#                                 #
+#                                 #
+###################################
+
 ###########################################################################
 ##	
 ##	RabbitMq initialization
 ##	
 ###########################################################################
 def RabbitMqInit():
+	# setup hello world consumer
 	helloWorldThread = threading.Thread(target=SetupRabbitMqHelloWorldConsumer, daemon=True)
 	helloWorldThread.start()
+	
+	# setup order created consumer
+	orderCreatedConsumerThread = threading.Thread(target=SetupRabbitMqOrderCreatedConsumer, daemon=True)
+	orderCreatedConsumerThread.start()
+	
+	# setup shopping cart validated producer
+	shoppingCartValidatedProducerThread = threading.Thread(target=SetupRabbitMqShoppignCartValidatedProducer, daemon=True)
+	shoppingCartValidatedProducerThread.start()
 	
 	return
 
@@ -447,12 +466,90 @@ def SetupRabbitMqHelloWorldConsumer():
 
 ###########################################################################
 ##	
+##	Setup RabbitMq order created consumer
+##	
+###########################################################################
+def SetupRabbitMqOrderCreatedConsumer():
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
+	# declare a new queue
+	rmqChannel.queue_declare(queue='OrderCreatedQueue')
+	rmqChannel.basic_qos(prefetch_count=1)
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='OrderCreatedQueue',
+							 on_message_callback=RmqOrderCreatedCallback)
+	
+	rmqChannel.start_consuming()
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq shopping cart validated producer
+##	
+###########################################################################
+def SetupRabbitMqShoppignCartValidatedProducer():
+	global shoppingCartValidatedChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	shoppingCartValidatedChannel = connection.channel()
+	
+	shoppingCartValidatedChannel.queue_declare(queue='ShoppingCartValidatedQueue')
+	
+	return
+
+###########################################################################
+##	
 ##	RabbitMq hello world consume callback
 ##	
 ###########################################################################
 def RmqHelloWorldCb(channel, method, properties, body):
 	data = body.decode('utf-8')
 	app.logger.info(f'RMQ: {data}')
+	
+	return
+
+###########################################################################
+##	
+##	RabbitMq hello world consume callback
+##	
+###########################################################################
+def RmqOrderCreatedCallback(channel, method, properties, body):
+	global shoppingCartValidatedChannel
+	global shoppingCartValidatedChannelLock
+	
+	data = body.decode('utf-8')
+	parsedData = json.loads(data)
+	app.logger.info(f'Shopping carts service consumed event in OrderCreatedQueue, data is {json.dumps(parsedData)}')
+	channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	# @todo swelter: mark shopping cart as closed and fetch all items in the cart
+	
+	with shoppingCartValidatedChannelLock:
+		shoppingCartValidatedChannel.basic_publish(exchange='',
+												   routing_key='ShoppingCartValidatedQueue',
+												   body=json.dumps(parsedData),
+												   properties=pika.BasicProperties(delivery_mode=2))
+		app.logger.info(f'Shopping cart service published event in ShoppingCartValidatedQueue')
 	
 	return
 

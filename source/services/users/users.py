@@ -123,15 +123,21 @@ def CreateUser():
 	
 	return 'success'
 
+###################################
+#                                 #
+#                                 #
+#            RABBIT MQ            #
+#                                 #
+#                                 #
+###################################
+
 ###########################################################################
 ##	
 ##	RabbitMq initialization
 ##	
 ###########################################################################
 def RabbitMqInit():
-	app.logger.info('good1')
 	helloWorldThread = threading.Thread(target=SetupRabbitMqHelloWorldConsumer, daemon=True)
-	app.logger.info('good2')
 	helloWorldThread.start()
 	
 	return
@@ -145,26 +151,21 @@ def SetupRabbitMqHelloWorldConsumer():
 	# read rabbitmq connection url from environment variable
 	amqpUrl = os.environ['AMQP_URL']
 	urlParams = pika.URLParameters(amqpUrl)
-	app.logger.info('good3')
 	
 	# connect to rabbitmq
 	connection = pika.BlockingConnection(urlParams)
-	app.logger.info('good4')
 	
 	app.logger.info('Successfully connected to RabbitMQ')
 	rmqChannel = connection.channel()
-	app.logger.info('good5')
 	
 	# declare a new queue
 	rmqChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
 	result = rmqChannel.queue_declare(queue='', exclusive=True)
 	queueName = result.method.queue
 	rmqChannel.queue_bind(exchange='HelloWorldTesting', queue=queueName)
-	app.logger.info('good6')
 	
 	# setup consuming queues
 	rmqChannel.basic_consume(queue=result.method.queue, on_message_callback=RmqHelloWorldCb, auto_ack=True)
-	app.logger.info('good7')
 	
 	# start consuming
 	rmqChannel.start_consuming()
@@ -183,7 +184,6 @@ def RmqHelloWorldCb(channel, method, properties, body):
 	return
 
 if __name__ == '__main__':
-	app.logger.info('GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG')
 	RabbitMqInit()
 	
 	dbPath = 'db/users.db'
