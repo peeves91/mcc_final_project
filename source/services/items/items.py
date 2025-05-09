@@ -135,9 +135,23 @@ def DecreaseItemStock():
 	
 	return 'success'
 
-def SetupRabbitMq():
-	global rmqChannel
+###########################################################################
+##	
+##	RabbitMq initialization
+##	
+###########################################################################
+def RabbitMqInit():
+	helloWorldThread = threading.Thread(target=SetupRabbitMqHelloWorldConsumer, daemon=True)
+	helloWorldThread.start()
 	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq hello world consumer
+##	
+###########################################################################
+def SetupRabbitMqHelloWorldConsumer():
 	# read rabbitmq connection url from environment variable
 	amqpUrl = os.environ['AMQP_URL']
 	urlParams = pika.URLParameters(amqpUrl)
@@ -149,19 +163,12 @@ def SetupRabbitMq():
 	rmqChannel = connection.channel()
 	
 	# declare a new queue
-	# rmqChannel.queue_declare(queue='HelloWorldQueue')
-	rmqChannel.exchange_declare(exchange='testing', exchange_type='fanout')
+	rmqChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
 	result = rmqChannel.queue_declare(queue='', exclusive=True)
 	queueName = result.method.queue
-	# rmqChannel.queue_bind(exchange='testing', queue=result.method.queue)
-	rmqChannel.queue_bind(exchange='testing', queue=queueName)
-	
-	# to make sure the consumer receives only one message at a time
-	# next message is received only after acking the previous one
-	# rmqChannel.basic_qos(prefetch_count=1)
+	rmqChannel.queue_bind(exchange='HelloWorldTesting', queue=queueName)
 	
 	# setup consuming queues
-	# rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
 	rmqChannel.basic_consume(queue=result.method.queue, on_message_callback=RmqHelloWorldCb, auto_ack=True)
 	
 	# start consuming
@@ -169,16 +176,19 @@ def SetupRabbitMq():
 	
 	return
 
+###########################################################################
+##	
+##	RabbitMq hello world consume callback
+##	
+###########################################################################
 def RmqHelloWorldCb(channel, method, properties, body):
 	data = body.decode('utf-8')
 	app.logger.info(f'RMQ: {data}')
-	# channel.basic_ack(delivery_tag=method.delivery_tag)
 	
 	return
 
 if __name__ == '__main__':
-	rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
-	rmqThread.start()
+	RabbitMqInit()
 	
 	dbPath = 'db/items.db'
 	# check_same_thread = False means the write operations aren't thread safe, but we take care of that with global var dbLock

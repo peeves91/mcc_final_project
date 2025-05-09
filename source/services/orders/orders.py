@@ -64,7 +64,7 @@ def HelloWorld():
 	global rmqChannel
 	
 	# rmqChannel.basic_publish(exchange='', routing_key='HelloWorldQueue', body=json.dumps({'hello': 'world'}), properties=pika.BasicProperties(delivery_mode=2))
-	rmqChannel.basic_publish(exchange='testing', routing_key='', body=json.dumps({'hello': 'world'}))
+	rmqChannel.basic_publish(exchange='HelloWorldTesting', routing_key='', body=json.dumps({'hello': 'world'}))
 	
 	return "hello, world"
 
@@ -213,8 +213,7 @@ def SetupRabbitMq():
 	rmqChannel = connection.channel()
 	
 	# declare a new queue
-	# rmqChannel.queue_declare(queue='HelloWorldQueue')
-	rmqChannel.exchange_declare(exchange='testing', exchange_type='fanout')
+	rmqChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
 	
 	return
 

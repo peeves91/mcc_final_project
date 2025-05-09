@@ -1,12 +1,15 @@
 from flask import Flask, jsonify, request, make_response
 from flask_expects_json import expects_json
 import datetime
+import logging
 import os
 import pika
 import sqlite3
 import threading
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
+
 dbPath = None
 
 # rabbitmq channel
@@ -120,30 +123,59 @@ def CreateUser():
 	
 	return 'success'
 
-def SetupRabbitMq():
-	global rmqChannel
+###########################################################################
+##	
+##	RabbitMq initialization
+##	
+###########################################################################
+def RabbitMqInit():
+	app.logger.info('good1')
+	helloWorldThread = threading.Thread(target=SetupRabbitMqHelloWorldConsumer, daemon=True)
+	app.logger.info('good2')
+	helloWorldThread.start()
 	
+	return
+
+###########################################################################
+##	
+##	Setup RabbitMq hello world consumer
+##	
+###########################################################################
+def SetupRabbitMqHelloWorldConsumer():
 	# read rabbitmq connection url from environment variable
 	amqpUrl = os.environ['AMQP_URL']
 	urlParams = pika.URLParameters(amqpUrl)
+	app.logger.info('good3')
 	
 	# connect to rabbitmq
 	connection = pika.BlockingConnection(urlParams)
+	app.logger.info('good4')
 	
 	app.logger.info('Successfully connected to RabbitMQ')
 	rmqChannel = connection.channel()
+	app.logger.info('good5')
 	
 	# declare a new queue
-	rmqChannel.queue_declare(queue='HelloWorldQueue')
+	rmqChannel.exchange_declare(exchange='HelloWorldTesting', exchange_type='fanout')
+	result = rmqChannel.queue_declare(queue='', exclusive=True)
+	queueName = result.method.queue
+	rmqChannel.queue_bind(exchange='HelloWorldTesting', queue=queueName)
+	app.logger.info('good6')
 	
 	# setup consuming queues
-	rmqChannel.basic_consume(queue='HelloWorldQueue', on_message_callback=RmqHelloWorldCb)
+	rmqChannel.basic_consume(queue=result.method.queue, on_message_callback=RmqHelloWorldCb, auto_ack=True)
+	app.logger.info('good7')
 	
 	# start consuming
 	rmqChannel.start_consuming()
 	
 	return
 
+###########################################################################
+##	
+##	RabbitMq hello world consume callback
+##	
+###########################################################################
 def RmqHelloWorldCb(channel, method, properties, body):
 	data = body.decode('utf-8')
 	app.logger.info(f'RMQ: {data}')
@@ -151,8 +183,8 @@ def RmqHelloWorldCb(channel, method, properties, body):
 	return
 
 if __name__ == '__main__':
-	# rmqThread = threading.Thread(target=SetupRabbitMq, daemon=True)
-	# rmqThread.start()
+	app.logger.info('GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG')
+	RabbitMqInit()
 	
 	dbPath = 'db/users.db'
 	
