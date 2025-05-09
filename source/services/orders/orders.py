@@ -154,30 +154,15 @@ def PurchaseQueuedItems():
 	reqData = request.get_json()
 	
 	userId = GetUserIdFromEmail(email=reqData['user_email'])
-	
-	# @todo swelter: create new cart and get the cart_id here
+
+	if userId == None:
+		return make_response('no user found with that cart', 500)
 	
 	with orderCreatedChannelLock:
 		with dbLock:
 			dbCursor.execute('INSERT INTO orders(user_id, status) VALUES (?, ?)', (userId, 'pending',))
 			orderDbConn.commit()
 			cartId = dbCursor.lastrowid
-		
-		# url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/purchase_cart'
-		# postData = {'user_id': userId}
-		# resp = requests.post(url=url, data=json.dumps(postData), headers=JSON_HEADER_DATATYPE)
-		
-		# # if there was an error purchasing cart, return it
-		# if resp.status_code != 200:
-		# 	return make_response(resp.text, resp.status_code)
-		
-		# try:
-		# 	respJson = resp.json()
-		# except requests.exceptions.JSONDecodeError:
-		# 	return make_response('failed to decode json purchasing cart items', 500)
-		
-		# return purchased items
-		# return jsonify(respJson)
 		
 		# publish order created event
 		eventData = {
@@ -345,6 +330,9 @@ def SetupRabbitMqOrderItemsValidatedConsumer():
 ##	
 ###########################################################################
 def OrderItemsValidatedCallback(channel, method, properties, body):
+	global orderDbConn
+	global dbCursor
+	global dbLock
 	global orderItemsValidatedChannel
 	
 	data = body.decode('utf-8')
@@ -353,6 +341,26 @@ def OrderItemsValidatedCallback(channel, method, properties, body):
 	channel.basic_ack(delivery_tag=method.delivery_tag)
 	
 	# @todo swelter: mark the order as purchased
+	orderTotal = 0
+	with dbLock:
+		
+		# add items to order_items table
+		dataToInsert = []
+		for item in parsedData['items']:
+			itemId = item['item_id']
+			itemQuantity = item['item_quantity']
+			itemPrice = item['item_price']
+			
+			orderTotal += itemPrice * itemQuantity
+			
+			dataToInsert.append((parsedData['order_id'], itemId, itemQuantity, itemPrice,))
+		# dbCursor.executemany('INSERT INTO order_items(order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)', (parsedData['order_id'], itemId, itemQuantity, itemPrice,))
+		dbCursor.executemany('INSERT INTO order_items(order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)', dataToInsert)
+		orderDbConn.commit()
+		
+		# mark order as purchased and set the price
+		dbCursor.execute('UPDATE orders SET status = ?, total_price = ? WHERE id = ? AND user_id = ?', ('purchased', orderTotal, parsedData['order_id'], parsedData['user_id'],))
+		orderDbConn.commit()
 	
 	return
 

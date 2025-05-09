@@ -265,6 +265,9 @@ def RmqHelloWorldCb(channel, method, properties, body):
 ##	
 ###########################################################################
 def RmqOrderCreatedCallback(channel, method, properties, body):
+	global itemsDbConn
+	global dbCursor
+	global dbLock
 	global orderItemsValidatedChannel
 	global orderItemsValidatedChannelLock
 	
@@ -273,7 +276,26 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	app.logger.info(f'Items service consumed event in OrderItemsValidatedQueue, data is {json.dumps(parsedData)}')
 	channel.basic_ack(delivery_tag=method.delivery_tag)
 	
-	# @todo swelter: decrement items from stock if valid here
+	# validate all items are in stock
+	for item in parsedData['items']:
+		dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (item['item_id'],))
+		quantityInStock = dbCursor.fetchone()[0]
+		if item['item_quantity'] > quantityInStock:
+			# @todo swelter: return OrderFailed event as not enough items are in stock
+			a = 1
+	
+	# if we got here, all items are valid, decrement stock
+	dataToInsert = []
+	for item in parsedData['items']:
+			# app.logger.info(str(item['item_quantity']))
+			# app.logger.info(str(item['item_id']))
+			# app.logger.info(str(type(item['item_quantity'])))
+			# app.logger.info(str(type(item['item_id'])))
+		dataToInsert.append((quantityInStock - item['item_quantity'], item['item_id'],))
+	with dbLock:
+		# dbCursor.execute('UPDATE items SET quantity_in_stock = ? WHERE id = ?', (quantityInStock - item['item_quantity'], item['item_id'],))
+		dbCursor.executemany('UPDATE items SET quantity_in_stock = ? WHERE id = ?', dataToInsert)
+		itemsDbConn.commit()
 	
 	with orderItemsValidatedChannelLock:
 		orderItemsValidatedChannel.basic_publish(exchange='',

@@ -1,17 +1,14 @@
 import argparse
 import csv
+import os
 import random
 import sqlite3
 
-def main():
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--db-directory', dest='db_directory', required=True)
-	args = parser.parse_args()
-	
-	conn = sqlite3.connect(args.db_directory + '/items.db')
+def ItemsCsvToDb(dbDirectory, csvPath):
+	conn = sqlite3.connect(os.path.join(dbDirectory, 'items.db'))
 	cursor = conn.cursor()
 	
-	with open('items.csv', 'r', encoding='utf8') as file:
+	with open(csvPath, 'r', encoding='utf8') as file:
 		isFirst = True
 		reader = csv.reader(file, delimiter=',', quotechar='"')
 		rowsToInsert = []
@@ -32,4 +29,4 @@ def main():
 	return
 
 if __name__ == '__main__':
-	main()
+	ItemsCsvToDb()

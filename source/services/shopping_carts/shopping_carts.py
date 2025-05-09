@@ -488,7 +488,8 @@ def SetupRabbitMqOrderCreatedConsumer():
 	rmqChannel.basic_consume(queue='OrderCreatedQueue',
 							 on_message_callback=RmqOrderCreatedCallback)
 	
-	rmqChannel.start_consuming()
+	# rmqChannel.start_consuming()
+	# connection.process_data_events()
 	
 	# start consuming
 	rmqChannel.start_consuming()
@@ -534,6 +535,9 @@ def RmqHelloWorldCb(channel, method, properties, body):
 ##	
 ###########################################################################
 def RmqOrderCreatedCallback(channel, method, properties, body):
+	global cartDbConn
+	global dbCursor
+	global dbLock
 	global shoppingCartValidatedChannel
 	global shoppingCartValidatedChannelLock
 	
@@ -556,13 +560,19 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	# @todo swelter: handle failure here by emitting OrderFailed event
 	
 	cartId = cartResults[0]
+
+	# mark cart as closed
+	with dbLock:
+		dbCursor.execute('UPDATE shopping_carts SET status = ? WHERE id = ?', ('closed', cartId,))
+		cartDbConn.commit()
 	
-	dbCursor.execute('SELECT item_id, quantity FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
+	# fetch all items in cart
+	dbCursor.execute('SELECT item_id, quantity, price FROM shopping_cart_items WHERE cart_id = ?', (cartId,))
 	itemResults = dbCursor.fetchall()
 	
 	orderItems = []
 	for item in itemResults:
-		tempItem = {'item_id': item[0], 'item_quantity': item[1]}
+		tempItem = {'item_id': item[0], 'item_quantity': item[1], 'item_price': item[2]}
 		orderItems.append(tempItem)
 	
 	with shoppingCartValidatedChannelLock:
