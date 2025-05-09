@@ -246,6 +246,10 @@ def RabbitMqInit():
 	orderItemsValidatedConsumerThread = threading.Thread(target=SetupRabbitMqOrderItemsValidatedConsumer, daemon=True)
 	orderItemsValidatedConsumerThread.start()
 	
+	# setup order failed consumer
+	orderFailedConsumerThread = threading.Thread(target=SetupRabbitMqOrderFailedConsumer, daemon=True)
+	orderFailedConsumerThread.start()
+	
 	return
 
 ###########################################################################
@@ -326,14 +330,44 @@ def SetupRabbitMqOrderItemsValidatedConsumer():
 
 ###########################################################################
 ##	
-##	RabbitMq hello world consume callback
+##	Setup RabbitMq order items validated consumer
+##	
+###########################################################################
+def SetupRabbitMqOrderFailedConsumer():
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	rmqChannel = connection.channel()
+	
+	# declare a new queue
+	rmqChannel.queue_declare(queue='OrderFailedQueue')
+	rmqChannel.basic_qos(prefetch_count=1)
+	
+	# setup consuming queues
+	rmqChannel.basic_consume(queue='OrderFailedQueue',
+							 on_message_callback=OrderFailedCallback)
+	
+	# rmqChannel.start_consuming()
+	
+	# start consuming
+	rmqChannel.start_consuming()
+	
+	return
+
+###########################################################################
+##	
+##	RabbitMq order items validated consume callback
 ##	
 ###########################################################################
 def OrderItemsValidatedCallback(channel, method, properties, body):
 	global orderDbConn
 	global dbCursor
 	global dbLock
-	global orderItemsValidatedChannel
 	
 	data = body.decode('utf-8')
 	parsedData = json.loads(data)
@@ -354,12 +388,33 @@ def OrderItemsValidatedCallback(channel, method, properties, body):
 			orderTotal += itemPrice * itemQuantity
 			
 			dataToInsert.append((parsedData['order_id'], itemId, itemQuantity, itemPrice,))
-		# dbCursor.executemany('INSERT INTO order_items(order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)', (parsedData['order_id'], itemId, itemQuantity, itemPrice,))
 		dbCursor.executemany('INSERT INTO order_items(order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)', dataToInsert)
 		orderDbConn.commit()
 		
 		# mark order as purchased and set the price
 		dbCursor.execute('UPDATE orders SET status = ?, total_price = ? WHERE id = ? AND user_id = ?', ('purchased', orderTotal, parsedData['order_id'], parsedData['user_id'],))
+		orderDbConn.commit()
+	
+	return
+
+###########################################################################
+##	
+##	RabbitMq order failed consume callback
+##	
+###########################################################################
+def OrderFailedCallback(channel, method, properties, body):
+	global orderDbConn
+	global dbCursor
+	global dbLock
+	
+	data = body.decode('utf-8')
+	parsedData = json.loads(data)
+	app.logger.info(f'Order service consumed event OrderFailedCallback, data is {json.dumps(parsedData)}')
+	channel.basic_ack(delivery_tag=method.delivery_tag)
+	
+	# set the error message to the order status
+	with dbLock:
+		dbCursor.execute('UPDATE orders SET status = ? WHERE id = ?', (parsedData['error_message'], parsedData['order_id'],))
 		orderDbConn.commit()
 	
 	return

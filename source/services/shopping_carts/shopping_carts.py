@@ -27,6 +27,8 @@ dbLock = threading.Lock()
 rmqChannel = None
 shoppingCartValidatedChannel = None
 shoppingCartValidatedChannelLock = threading.Lock()
+orderFailedChannel = None
+orderFailedChannelLock = threading.Lock()
 
 CREATE_SHOPPING_CART_SCHEMA = {
 	"type": "object",
@@ -364,6 +366,10 @@ def RabbitMqInit():
 	shoppingCartValidatedProducerThread = threading.Thread(target=SetupRabbitMqShoppignCartValidatedProducer, daemon=True)
 	shoppingCartValidatedProducerThread.start()
 	
+	# setup order failed producer
+	orderFailedProducerThread = threading.Thread(target=SetupRabbitMqOrderFailedProducer, daemon=True)
+	orderFailedProducerThread.start()
+	
 	return
 
 ###########################################################################
@@ -452,6 +458,28 @@ def SetupRabbitMqShoppignCartValidatedProducer():
 
 ###########################################################################
 ##	
+##	Setup RabbitMq order failed producer
+##	
+###########################################################################
+def SetupRabbitMqOrderFailedProducer():
+	global orderFailedChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	orderFailedChannel = connection.channel()
+	
+	orderFailedChannel.queue_declare(queue='OrderFailedQueue')
+	
+	return
+
+###########################################################################
+##	
 ##	RabbitMq hello world consume callback
 ##	
 ###########################################################################
@@ -472,6 +500,8 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	global dbLock
 	global shoppingCartValidatedChannel
 	global shoppingCartValidatedChannelLock
+	global orderFailedChannel
+	global orderFailedChannelLock
 	
 	data = body.decode('utf-8')
 	parsedData = json.loads(data)
@@ -486,10 +516,16 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	dbCursor.execute('SELECT id FROM shopping_carts WHERE user_id = ? AND status = "open"', (userId,))
 	cartResults = dbCursor.fetchone()
 	
-	# # return 500 error if no cart found
-	# if cartResults == None:
-	# 	return make_response('no_cart', 500)
-	# @todo swelter: handle failure here by emitting OrderFailed event
+	# if no shopping cart found, set status message to data, publish event and return
+	if cartResults == None:
+		parsedData['error_message'] = 'no_sc_found'
+		orderFailedChannel.basic_publish(exchange='',
+											 routing_key='OrderFailedQueue',
+											 body=json.dumps(parsedData),
+											 properties=pika.BasicProperties(delivery_mode=2))
+		
+		# order error event pubhlished, we're done here
+		return
 	
 	cartId = cartResults[0]
 

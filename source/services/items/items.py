@@ -25,6 +25,8 @@ dbLock = threading.Lock()
 rmqChannel = None
 orderItemsValidatedChannel = None
 orderItemsValidatedChannelLock = threading.Lock()
+orderFailedChannel = None
+orderFailedChannelLock = threading.Lock()
 
 @app.route('/')
 def HelloWorld():
@@ -137,6 +139,10 @@ def RabbitMqInit():
 	orderItemsValidatedProducerThread = threading.Thread(target=SetupRabbitMqOrderItemsValidatedProducer, daemon=True)
 	orderItemsValidatedProducerThread.start()
 	
+	# setup order failed producer
+	orderFailedProducerThread = threading.Thread(target=SetupRabbitMqOrderFailedProducer, daemon=True)
+	orderFailedProducerThread.start()
+	
 	return
 
 ###########################################################################
@@ -224,6 +230,28 @@ def SetupRabbitMqOrderItemsValidatedProducer():
 
 ###########################################################################
 ##	
+##	Setup RabbitMq order failed producer
+##	
+###########################################################################
+def SetupRabbitMqOrderFailedProducer():
+	global orderFailedChannel
+	
+	# read rabbitmq connection url from environment variable
+	amqpUrl = os.environ['AMQP_URL']
+	urlParams = pika.URLParameters(amqpUrl)
+	
+	# connect to rabbitmq
+	connection = pika.BlockingConnection(urlParams)
+	
+	app.logger.info('Successfully connected to RabbitMQ')
+	orderFailedChannel = connection.channel()
+	
+	orderFailedChannel.queue_declare(queue='OrderFailedQueue')
+	
+	return
+
+###########################################################################
+##	
 ##	RabbitMq hello world consume callback
 ##	
 ###########################################################################
@@ -254,14 +282,27 @@ def RmqOrderCreatedCallback(channel, method, properties, body):
 	for item in parsedData['items']:
 		dbCursor.execute('SELECT quantity_in_stock FROM items WHERE id = ?', (item['item_id'],))
 		quantityInStock = dbCursor.fetchone()[0]
+		
+		# if not enough in stock publish order failed event and return
 		if item['item_quantity'] > quantityInStock:
-			# @todo swelter: return OrderFailed event as not enough items are in stock
-			a = 1
+			eventData = {
+				'user_id': parsedData['user_id'],
+				'order_id': parsedData['order_id'],
+				'error_message': 'not_enough_in_stock'
+			}
+			orderFailedChannel.basic_publish(exchange='',
+												routing_key='OrderFailedQueue',
+												body=json.dumps(eventData),
+												properties=pika.BasicProperties(delivery_mode=2))
+			
+			# order error event pubhlished, we're done here
+			return
 	
 	# if we got here, all items are valid, decrement stock
 	dataToInsert = []
 	for item in parsedData['items']:
 		dataToInsert.append((quantityInStock - item['item_quantity'], item['item_id'],))
+	
 	with dbLock:
 		dbCursor.executemany('UPDATE items SET quantity_in_stock = ? WHERE id = ?', dataToInsert)
 		itemsDbConn.commit()
