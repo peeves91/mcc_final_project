@@ -66,34 +66,6 @@ GET_SC_CONTAINING_ITEM = {
 }
 
 # helper functions
-def GetUserInfoFromEmailOrId(email=None, userId=None):
-	url = f'http://users_service:{USERS_SERVICE_PORT}/get_user'
-	
-	if email != None:
-		getData = {'user_email': email}
-	elif userId != None:
-		getData = {'user_id': userId}
-	else:
-		return None
-	
-	resp = requests.get(url=url, data=json.dumps(getData), headers=JSON_HEADER_DATATYPE)
-	
-	try:
-		respJson = resp.json()
-	except requests.exceptions.JSONDecodeError:
-		return None
-	
-	# if no users found, return None
-	if len(respJson['results']) == 0:
-		return None
-	
-	foundUser = respJson['results'][0]
-	
-	return foundUser
-
-def GetUserIdFromEmail(email: str) -> int:
-	return GetUserInfoFromEmailOrId(email=email)['user_id']
-
 def GetItemInfoFromNameOrId(itemName: str=None, itemId: int=None) -> int:
 	url = f'http://items_service:{ITEMS_SERVICE_PORT}/get_item_info'
 	
