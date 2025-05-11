@@ -23,7 +23,7 @@ services:
     depends_on:
       - rabbit_mq
     environment:
-      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10&heartbeat=0'
   orders_service:
     build: ./source/services/orders
     ports:
@@ -33,7 +33,7 @@ services:
     depends_on:
         - rabbit_mq
     environment:
-        AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+        AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10&heartbeat=0'
   sc_service:
     build: ./source/services/shopping_carts
     ports:
@@ -43,7 +43,7 @@ services:
     depends_on:
       - rabbit_mq
     environment:
-      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10&heartbeat=0'
   users_service:
     build: ./source/services/users
     ports:
@@ -53,7 +53,7 @@ services:
     depends_on:
       - rabbit_mq
     environment:
-      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10&heartbeat=0'
   reminder_service:
     build: ./source/services/reminder
     # ports:
@@ -64,7 +64,7 @@ services:
       - rabbit_mq
       - sc_service
     environment:
-      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10&heartbeat=0'
       # PYTHONUNBUFFERED: 1
 networks:
   my-network:
