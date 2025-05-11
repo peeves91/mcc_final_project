@@ -253,6 +253,24 @@ def CancelCart():
 	
 	return 'success'
 
+###########################################################################
+##	
+##	Returns a list of tuples of open shopping carts (cartId, userId)
+##	
+###########################################################################
+@app.route('/get_open_shopping_carts', methods=['GET'])
+def GetOpenShoppingCarts():
+	global dbCursor
+	
+	dbCursor.execute('SELECT id, user_id FROM shopping_carts WHERE status = "open"')
+	results = dbCursor.fetchall()
+	
+	openCarts = []
+	for e in results:
+		openCarts.append((e[0], e[1]))
+	
+	return jsonify(openCarts)
+
 ###################################
 #                                 #
 #                                 #

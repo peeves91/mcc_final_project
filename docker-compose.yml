@@ -54,6 +54,18 @@ services:
       - rabbit_mq
     environment:
       AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+  reminder_service:
+    build: ./source/services/reminder
+    # ports:
+    #   - "7000:7000"
+    volumes:
+      - ./db:/app/db
+    depends_on:
+      - rabbit_mq
+      - sc_service
+    environment:
+      AMQP_URL: 'amqp://rabbit_mq?connection_attempts=10&retry_delay=10'
+      # PYTHONUNBUFFERED: 1
 networks:
   my-network:
     driver: bridge

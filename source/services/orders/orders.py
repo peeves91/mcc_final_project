@@ -361,6 +361,16 @@ def GetPurchasedOrderItems():
 	
 	return jsonify(items)
 
+@app.route('/test', methods=['GET'])
+def testing():
+	url = f'http://sc_service:{SHOPPING_CART_SERVICE_PORT}/get_open_shopping_carts'
+	resp = requests.get(url=url)
+	
+	# app.logger.info(json.dumps(resp.json()))
+	
+	# return 'success'
+	return jsonify(resp.json())
+
 ###################################
 #                                 #
 #                                 #
